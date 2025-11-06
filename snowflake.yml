@@ -1,0 +1,27 @@
+# Snowflake Native App Project Definition
+# Snowflake Config Rules - Monitors warehouse compliance with configurable rules
+
+definition_version: 2
+
+entities:
+  # Application Package - contains the app artifacts
+  pkg:
+    type: application package
+    identifier: snowflake_config_rules_pkg
+    stage: app_src.stage
+    manifest: app/manifest.yml
+    artifacts:
+      - src: app/*
+        dest: ./
+    # meta:
+    #   post_deploy:
+    #     - sql_script: scripts/post_deploy.sql
+    
+    
+  # Application - instance of the app
+  app:
+    type: application
+    from:
+      target: pkg
+    identifier: snowflake_config_rules_app
+

@@ -1,0 +1,273 @@
+/* Snowflake Config Rules - Minimalistic Styles */
+
+/* Refresh Icon Button */
+.refresh-button {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 999;
+}
+
+/* Main Header Styles */
+.main-header {
+    background: #2196F3;
+    padding: 1rem 1.2rem;
+    border-radius: 4px;
+    margin-bottom: 1.2rem;
+}
+
+.main-header h1 {
+    color: white;
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 400;
+}
+
+.main-header p {
+    color: rgba(255,255,255,0.85);
+    margin: 0.2rem 0 0 0;
+    font-size: 0.9rem;
+    font-weight: 300;
+}
+
+/* Metric Card Styles */
+.metric-card {
+    background: #FAFAFA;
+    padding: 0.8rem;
+    border-radius: 4px;
+    border: 1px solid #E8E8E8;
+    margin-bottom: 0.6rem;
+}
+
+.metric-card h3 {
+    color: #424242;
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 400;
+}
+
+.metric-card p {
+    margin: 0.2rem 0 0 0;
+    color: #757575;
+    font-size: 0.8rem;
+    font-weight: 400;
+}
+
+.metric-card.success h3 {
+    color: #388E3C;
+}
+
+.metric-card.error h3 {
+    color: #D32F2F;
+}
+
+.metric-card.warning h3 {
+    color: #F57C00;
+}
+
+.metric-card.purple h3 {
+    color: #7B1FA2;
+}
+
+.metric-card.cyan h3 {
+    color: #0097A7;
+}
+
+/* Compliance Card Styles - Minimalistic */
+.compliant-card {
+    background: #FAFAFA;
+    padding: 0.8rem;
+    border-radius: 4px;
+    border: 1px solid #E8E8E8;
+    border-left: 2px solid #66BB6A;
+    margin-bottom: 0.6rem;
+}
+
+.compliant-card h3 {
+    margin: 0;
+    color: #424242;
+    font-size: 1rem;
+    font-weight: 400;
+}
+
+.non-compliant-card {
+    background: #FAFAFA;
+    padding: 0.8rem;
+    border-radius: 4px;
+    border: 1px solid #E8E8E8;
+    border-left: 2px solid #EF5350;
+    margin-bottom: 0.6rem;
+}
+
+.non-compliant-card h3 {
+    margin: 0;
+    color: #424242;
+    font-size: 1rem;
+    font-weight: 400;
+}
+
+/* Rule Card Styles */
+.rule-card {
+    background: #FAFAFA;
+    padding: 0.8rem;
+    border-radius: 4px;
+    border: 1px solid #E8E8E8;
+    margin-bottom: 0.6rem;
+}
+
+.rule-card h4 {
+    margin: 0 0 0.4rem 0;
+    color: #424242;
+    font-size: 0.95rem;
+    font-weight: 400;
+}
+
+.rule-card p {
+    margin: 0.2rem 0;
+    color: #757575;
+    font-size: 0.85rem;
+}
+
+/* Warehouse Detail Box Styles - Compact */
+.warehouse-detail-box {
+    background: #F5F5F5;
+    padding: 0.5rem 0.7rem;
+    border-radius: 3px;
+    margin: 0.3rem 0;
+    border: 1px solid #E8E8E8;
+    font-size: 0.85rem;
+}
+
+.warehouse-detail-box strong {
+    color: #616161;
+    font-weight: 400;
+}
+
+/* Violation Item Styles - Compact */
+.violation-item {
+    background: #FFF9E6;
+    padding: 0.5rem 0.7rem;
+    border-radius: 3px;
+    border-left: 2px solid #FFA726;
+    margin: 0.3rem 0;
+    font-size: 0.85rem;
+}
+
+.violation-item strong {
+    color: #616161;
+    font-weight: 400;
+}
+
+.violation-item code {
+    background: #FFE8B3;
+    padding: 2px 5px;
+    border-radius: 2px;
+    font-size: 0.8em;
+    color: #616161;
+    font-family: 'Monaco', 'Courier New', monospace;
+}
+
+/* Compact Warehouse Card */
+.warehouse-compact {
+    background: #FAFAFA;
+    padding: 0.7rem 0.9rem;
+    border-radius: 4px;
+    border: 1px solid #E8E8E8;
+    margin-bottom: 0.5rem;
+}
+
+.warehouse-compact.compliant {
+    border-left: 2px solid #66BB6A;
+}
+
+.warehouse-compact.non-compliant {
+    border-left: 2px solid #EF5350;
+}
+
+.warehouse-name {
+    font-size: 0.95rem;
+    font-weight: 400;
+    color: #424242;
+    margin-bottom: 0.3rem;
+}
+
+.warehouse-info {
+    font-size: 0.8rem;
+    color: #757575;
+    margin-bottom: 0.3rem;
+}
+
+.warehouse-violations {
+    font-size: 0.8rem;
+    color: #616161;
+    background: #FFF9E6;
+    padding: 0.4rem 0.5rem;
+    border-radius: 3px;
+    margin-top: 0.3rem;
+}
+
+/* Tab Styles - Minimalistic */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 2px;
+    border-bottom: 1px solid #E8E8E8;
+}
+
+.stTabs [data-baseweb="tab"] {
+    padding: 8px 16px;
+    background-color: transparent;
+    border-radius: 3px 3px 0 0;
+    font-weight: 400;
+    color: #757575;
+}
+
+.stTabs [aria-selected="true"] {
+    background-color: #2196F3;
+    color: white;
+}
+
+/* Footer Styles */
+.footer {
+    text-align: center;
+    color: #9E9E9E;
+    padding: 0.8rem;
+    margin-top: 1.5rem;
+    border-top: 1px solid #E8E8E8;
+}
+
+.footer p {
+    margin: 0.15rem 0;
+    font-size: 0.85rem;
+}
+
+.footer strong {
+    color: #757575;
+    font-weight: 400;
+}
+
+/* SQL Code Block Enhancement */
+.sql-container {
+    background: #F5F5F5;
+    border: 1px solid #E8E8E8;
+    border-radius: 3px;
+    padding: 0.4rem;
+    margin: 0.4rem 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .main-header h1 {
+        font-size: 1.3rem;
+    }
+    
+    .main-header p {
+        font-size: 0.8rem;
+    }
+    
+    .metric-card h3 {
+        font-size: 1.3rem;
+    }
+    
+    .warehouse-compact {
+        padding: 0.5rem 0.7rem;
+    }
+}

@@ -1,0 +1,4 @@
+GRANT CREATE WAREHOUSE ON ACCOUNT TO ROLE wh_native_app_admin;
+GRANT EXECUTE TASK ON ACCOUNT TO ROLE wh_native_app_admin;
+GRANT MANAGE WAREHOUSES ON ACCOUNT TOwh_native_app_admin ROLE wh_native_app_admin;
+GRANT IMPORTED PRIVILEGES ON DATABASE snowflake TO ROLE wh_native_app_admin;
