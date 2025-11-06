@@ -1,8 +1,35 @@
 # Snowflake Config Rules
 
-## Overview
+## Documentation
 
-Snowflake Config Rules is a Snowflake Native App that helps you define, apply, and enforce configuration compliance rules across all warehouses in your Snowflake account. The app automatically monitors warehouse configurations, identifies non-compliant warehouses, and generates SQL scripts to remediate issues.
+Please see the main [README.md](../README.md) at the root of the repository for comprehensive documentation.
+
+## Quick Links
+
+- **Main README**: [../README.md](../README.md)
+- **Module Structure**: [../docs/MODULE_STRUCTURE.md](../docs/MODULE_STRUCTURE.md)
+- **Adding New Rules**: [../docs/ADDING_NEW_RULES.md](../docs/ADDING_NEW_RULES.md)
+- **Change Log**: [../docs/CHANGES.md](../docs/CHANGES.md)
+
+## Quick Overview
+
+This is a Snowflake Native App that helps you define, apply, and enforce configuration compliance rules across all warehouses in your Snowflake account.
+
+### Key Features
+- 📋 Rule Configuration - Define and apply rules with custom thresholds
+- 🔍 Compliance View - Monitor compliance with Fix button for automatic remediation
+- 📊 Warehouse Overview - Complete warehouse inventory and analytics
+- 🎨 Modern UI - Minimalistic design with refresh buttons in all tabs
+
+### Usage
+1. Install the app: `snow app run`
+2. Navigate to Rule Configuration tab
+3. Apply a rule with your desired threshold
+4. Check Compliance View for violations
+5. Click Fix button to remediate automatically
+
+For detailed documentation, installation instructions, troubleshooting, and extensibility guides, please refer to the main README.
+
 
 ## What This App Does
 
