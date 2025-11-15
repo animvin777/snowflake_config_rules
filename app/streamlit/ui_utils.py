@@ -22,8 +22,8 @@ def render_header():
     """Render the main application header"""
     st.markdown("""
         <div class="main-header">
-            <h1>Snowflake Config Rules</h1>
-            <p>Manage and enforce warehouse configuration compliance rules</p>
+            <h1>⚙️ Configuration Compliance Manager</h1>
+            <p>Monitor and enforce configuration standards across your Snowflake environment</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -34,7 +34,7 @@ def render_footer():
     st.markdown("""
         <div class="footer">
             <p><strong>Snowflake Config Rules</strong></p>
-            <p>Monitor and enforce warehouse configuration compliance across your Snowflake account</p>
+            <p>Monitor and enforce configuration compliance across your Snowflake account</p>
             <p>Last refreshed: {}</p>
         </div>
     """.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)

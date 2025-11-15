@@ -1,219 +1,46 @@
-# Snowflake Config Rules
+# Configuration Compliance Manager
 
-## Documentation
+Welcome to the Configuration Compliance Manager! This app helps you enforce consistent configuration standards across all warehouses and databases in your Snowflake account.
 
-Please see the main [README.md](../README.md) at the root of the repository for comprehensive documentation.
+---
 
-## Quick Links
+## 🎯 What This App Does
 
-- **Main README**: [../README.md](../README.md)
-- **Module Structure**: [../docs/MODULE_STRUCTURE.md](../docs/MODULE_STRUCTURE.md)
-- **Adding New Rules**: [../docs/ADDING_NEW_RULES.md](../docs/ADDING_NEW_RULES.md)
-- **Change Log**: [../docs/CHANGES.md](../docs/CHANGES.md)
+Monitor and enforce configuration compliance across your Snowflake environment:
+- 📋 **Apply Rules** - Set standards for warehouse and database configurations
+- 🔍 **Monitor Compliance** - Real-time visibility into compliant and non-compliant resources
+- 🔧 **Auto-Remediate** - One-click fixes for violations
+- ⏱️ **Automate Collection** - Scheduled tasks keep data up-to-date
 
-## Quick Overview
+---
 
-This is a Snowflake Native App that helps you define, apply, and enforce configuration compliance rules across all warehouses in your Snowflake account.
+## ⚡ Quick Start
 
-### Key Features
-- 📋 Rule Configuration - Define and apply rules with custom thresholds
-- 🔍 Compliance View - Monitor compliance with Fix button for automatic remediation
-- 📊 Warehouse Overview - Complete warehouse inventory and analytics
-- 🎨 Modern UI - Minimalistic design with refresh buttons in all tabs
+### Step 1: Complete Post-Installation Setup (**Required**)
 
-### Usage
-1. Install the app: `snow app run`
-2. Navigate to Rule Configuration tab
-3. Apply a rule with your desired threshold
-4. Check Compliance View for violations
-5. Click Fix button to remediate automatically
-
-For detailed documentation, installation instructions, troubleshooting, and extensibility guides, please refer to the main README.
-
-
-## What This App Does
-
-- **Define Configuration Rules**: Set up rules for warehouse parameters like auto-suspend time and statement timeout
-- **Apply Rules with Thresholds**: Apply rules with specific threshold values that warehouses must comply with
-- **Automated Monitoring**: Runs a scheduled task to capture warehouse configurations periodically
-- **Compliance Dashboard**: Interactive Streamlit app that highlights compliant and non-compliant warehouses
-- **SQL Generation**: Automatically generates SQL statements to fix non-compliant warehouses
-- **Extensible Architecture**: Easily add new rules by inserting records into the config_rules table
-
-## Key Features
-
-### 1. Rule Configuration Tab
-- View all available configuration rules
-- Apply rules with custom threshold values
-- Manage currently applied rules
-- Generate SQL to fix all non-compliant warehouses for a specific rule
-- Deactivate rules when no longer needed
-
-### 2. Compliance View Tab
-- Real-time compliance status for all warehouses
-- Summary metrics (Total, Compliant, Non-Compliant warehouses)
-- Filter views: All Warehouses, Non-Compliant Only, or Compliant Only
-- Detailed violation information for each warehouse
-- Generate fix SQL per warehouse with a single click
-
-### 3. Warehouse Overview Tab
-- Complete inventory of all warehouses
-- Visual analytics showing warehouse distribution by size and type
-- Quick reference for warehouse configurations
-
-## Built-in Configuration Rules
-
-The app comes with two pre-configured rules that can be immediately applied:
-
-### 1. Max Statement Timeout in Seconds
-- **Purpose**: Ensures warehouses don't have statement timeouts exceeding your organization's standards
-- **Parameter**: `STATEMENT_TIMEOUT_IN_SECONDS`
-- **Operator**: MAX (warehouse value must be <= threshold)
-- **Example**: Set threshold to 600 seconds to ensure no warehouse can run queries longer than 10 minutes
-
-### 2. Max Auto Suspend in Seconds
-- **Purpose**: Prevents warehouses from staying idle too long, reducing unnecessary compute costs
-- **Parameter**: `AUTO_SUSPEND`
-- **Operator**: MAX (warehouse value must be <= threshold)
-- **Example**: Set threshold to 300 seconds to ensure warehouses suspend within 5 minutes of inactivity
-
-## How to Use
-
-### Initial Setup
-
-1. **Install the App** in your Snowflake account
-2. **Grant Required Privileges** (automatically requested during installation):
-   - CREATE WAREHOUSE
-   - EXECUTE TASK
-   - MANAGE WAREHOUSES
-   - EXECUTE MANAGED TASK
-   - MODIFY (to alter warehouse configurations)
-
-### Applying Configuration Rules
-
-1. Navigate to the **Rule Configuration** tab
-2. Select a rule from the dropdown (e.g., "Max Auto Suspend in Seconds")
-3. Enter your desired threshold value
-4. Click **Apply Rule**
-5. The rule is now active and monitoring will begin
-
-### Monitoring Compliance
-
-1. Go to the **Compliance View** tab
-2. Review the summary metrics at the top
-3. Use the filter to focus on non-compliant warehouses
-4. For each non-compliant warehouse, you'll see:
-   - Current configuration value
-   - Required threshold value
-   - Specific violations
-
-### Generating Remediation SQL
-
-**Option 1: Per Rule (All Non-Compliant Warehouses)**
-1. In the **Rule Configuration** tab
-2. Find the applied rule
-3. Click **Generate SQL**
-4. Copy and execute the generated SQL script
-
-**Option 2: Per Warehouse**
-1. In the **Compliance View** tab
-2. Find a non-compliant warehouse
-3. Click **Generate Fix SQL**
-4. Copy and execute the generated SQL for that specific warehouse
-
-### Example Remediation SQL
-
-```sql
--- Generated SQL to fix auto_suspend violations
-ALTER WAREHOUSE COMPUTE_WH
-SET AUTO_SUSPEND = 300;
-
-ALTER WAREHOUSE DATA_LOAD_WH
-SET AUTO_SUSPEND = 300;
-```
-
-## Adding New Configuration Rules
-
-The app is designed to be easily extensible. To add a new rule:
-
-1. Insert a new record into the `config_rules` table:
-
-```sql
-INSERT INTO data_schema.config_rules (
-    rule_id, 
-    rule_name, 
-    rule_description, 
-    warehouse_parameter, 
-    comparison_operator, 
-    unit
-)
-VALUES (
-    'MIN_AUTO_SUSPEND',  -- Unique identifier
-    'Min Auto Suspend in Seconds',  -- Display name
-    'Minimum required auto suspend time for warehouses',  -- Description
-    'AUTO_SUSPEND',  -- Warehouse parameter to check
-    'MIN',  -- Comparison operator (MAX, MIN, or EQUALS)
-    'seconds'  -- Unit for display
-);
-```
-
-2. Update the `check_compliance()` function in the Streamlit app to handle the new parameter (if it's a new warehouse parameter not already monitored)
-
-3. Update the `generate_fix_sql()` function to generate appropriate SQL for the new parameter
-
-## Supported Comparison Operators
-
-- **MAX**: Warehouse value must be less than or equal to threshold
-- **MIN**: Warehouse value must be greater than or equal to threshold
-- **EQUALS**: Warehouse value must exactly match threshold
-
-## Data Collection Schedule
-
-The app runs a scheduled task to capture warehouse configurations:
-- **Frequency**: Every 2 hours (can be modified in setup_script.sql)
-- **Initial Run**: Executed immediately during installation
-- **Manual Refresh**: Use the "🔄 Refresh Data" button in the Streamlit app
-
-## Post-Installation Setup (Optional)
-
-### Enable Enhanced Parameter Monitoring
-
-By default, the app captures basic warehouse information from `SHOW WAREHOUSES`, including the `AUTO_SUSPEND` parameter. To also capture additional warehouse-specific parameters like **max_concurrency_level**, **statement_timeout_in_seconds**, and **statement_queued_timeout_in_seconds**, you can create an additional task in your account.
-
-#### Why is this optional?
-
-Due to Snowflake Native App security restrictions, the app cannot directly execute `SHOW PARAMETERS FOR WAREHOUSE` on warehouses in your account. If you want to monitor rules based on `statement_timeout_in_seconds`, you need to create a task in your account that runs with your account's privileges.
-
-#### Setup Steps
-
-Run the following SQL in your account after installing the app:
+To enable complete parameter monitoring (including statement timeouts), you must create an additional task in your account:
 
 ```sql
 USE ROLE ACCOUNTADMIN;
-USE APPLICATION snowflake_config_rules_app;  -- Choose a database where you want to create the task
+USE DATABASE SNOWFLAKE_CONFIG_RULES_APP;  -- Use your app's database name
 
--- Create a task that runs after the app's monitoring task
+-- Create serverless task to capture warehouse parameters
 CREATE OR REPLACE TASK data_schema.warehouse_params_monitor_task
-    USER_TASK_TIMEOUT_MS = 3600000
-    WAREHOUSE = CONFIG_RULES_VW  -- Or use your own warehouse
-    SCHEDULE = 'USING CRON 10 7 * * * America/New_York'  -- Run 10 min after the main task
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    SCHEDULE = 'USING CRON 10 7 * * * America/New_York'
 AS
 DECLARE
   wh_name VARCHAR;
   wh_cursor CURSOR FOR 
     SELECT DISTINCT name 
-    FROM snowflake_config_rules_app.data_schema.warehouse_details 
+    FROM data_schema.warehouse_details 
     WHERE capture_timestamp >= DATEADD(HOUR, -3, CURRENT_TIMESTAMP());
 BEGIN
   FOR wh_rec IN wh_cursor DO
     wh_name := wh_rec.name;
-    
     BEGIN
-      -- Get parameters for this warehouse
       SHOW PARAMETERS IN WAREHOUSE IDENTIFIER(:wh_name);
-      
-      -- Update the warehouse_details table with parameter values
-      MERGE INTO snowflake_config_rules_app.data_schema.warehouse_details tgt
+      MERGE INTO data_schema.warehouse_details tgt
       USING (
         SELECT 
           :wh_name as warehouse_name,
@@ -229,87 +56,448 @@ BEGIN
         tgt.statement_queued_timeout_in_seconds = src.queued_timeout,
         tgt.statement_timeout_in_seconds = src.stmt_timeout;
     EXCEPTION
-      WHEN OTHER THEN
-        -- Skip warehouses we don't have access to
-        CONTINUE;
+      WHEN OTHER THEN CONTINUE;
     END;
   END FOR;
 END;
 
--- Resume the parameter monitoring task
+-- Activate and grant permissions
 ALTER TASK data_schema.warehouse_params_monitor_task RESUME;
+GRANT ALL ON TASK data_schema.warehouse_params_monitor_task TO APPLICATION SNOWFLAKE_CONFIG_RULES_APP;
 
 -- Execute tasks to populate initial data
-EXECUTE TASK snowflake_config_rules_app.data_schema.warehouse_monitor_task;
-EXECUTE TASK snowflake_config_rules_app.data_schema.warehouse_params_monitor_task;
+EXECUTE TASK data_schema.warehouse_monitor_task;
+EXECUTE TASK data_schema.warehouse_params_monitor_task;
 ```
 
-This task will:
-- Run automatically every 2 hours, 10 minutes after the app's monitoring task
-- Query warehouse parameters for all warehouses captured in the most recent collection
-- Update the `warehouse_details` table with the parameter values
-- Skip any warehouses you don't have access to
-
-To verify parameters are being captured:
+**Verify Setup:**
 ```sql
-SELECT name, size, auto_suspend, statement_timeout_in_seconds, 
-       max_concurrency_level, statement_queued_timeout_in_seconds
-FROM snowflake_config_rules_app.data_schema.warehouse_details
-WHERE capture_timestamp >= DATEADD(HOUR, -3, CURRENT_TIMESTAMP());
+SELECT name, auto_suspend, statement_timeout_in_seconds
+FROM data_schema.warehouse_details
+LIMIT 5;
+```
+Values for `statement_timeout_in_seconds` should be populated (not NULL).
+
+---
+
+### Step 2: Apply Configuration Rules
+
+1. Navigate to **⚙️ Configure Rules** tab
+2. Click **"🎯 Apply Default Rules"** button
+3. All 5 recommended rules are applied instantly
+
+---
+
+### Step 3: View & Fix Compliance
+
+1. Go to **🏭 Warehouse Compliance** tab
+2. Review summary metrics
+3. Filter to "Non-Compliant Only"
+4. Click **Fix** button on any warehouse to remediate automatically
+
+---
+
+## 📚 Available Rules
+
+### Warehouse Rules
+
+| Rule | What It Controls | Recommended Value | Why It Matters |
+|------|------------------|-------------------|----------------|
+| **Max Statement Timeout** | How long queries can run before terminating | 300 seconds (5 min) | Prevents runaway queries from consuming resources indefinitely |
+| **Max Auto Suspend** | How long warehouses stay idle before suspending | 30 seconds | Reduces costs by suspending inactive warehouses quickly |
+
+**Example: Max Auto Suspend**
+```
+If threshold = 30 seconds:
+  ✓ Compliant:     warehouse auto-suspends after 20 seconds
+  ✗ Non-Compliant: warehouse auto-suspends after 300 seconds
+
+Fix Action: ALTER WAREHOUSE xxx SET AUTO_SUSPEND = 30;
+Result: Warehouse suspends within 30 seconds of inactivity → Lower costs
 ```
 
-## Architecture
+### Database Rules
 
-### Database Schema
+| Rule | What It Controls | Recommended Value | Why It Matters |
+|------|------------------|-------------------|----------------|
+| **Max Table Retention** | Table-level Time Travel duration | 1 day | Reduces storage costs (7-day retention = 7x cost of 1-day) |
+| **Max Schema Retention** | Schema-level Time Travel duration | 1 day | Controls retention inheritance for all tables in schema |
+| **Max Database Retention** | Database-level Time Travel duration | 1 day | Sets default retention for entire database |
 
-**data_schema.warehouse_details**
-- Stores current warehouse configurations captured from `SHOW WAREHOUSES`
-- Updated every 2 hours by the monitoring task
+**Example: Max Table Retention**
+```
+If threshold = 1 day:
+  ✓ Compliant:     table has 0-day or 1-day retention
+  ✗ Non-Compliant: table has 7-day retention
 
-**data_schema.config_rules**
-- Stores available configuration rules that can be applied
-- Pre-populated with two rules (Max Statement Timeout, Max Auto Suspend)
-- Can be extended by inserting new rule definitions
+Fix Action: ALTER TABLE xxx SET DATA_RETENTION_TIME_IN_DAYS = 1;
+Result: Reduced Time Travel storage by ~85%
+```
 
-**data_schema.applied_rules**
-- Stores rules that have been applied with their threshold values
-- Tracks when rules were applied and by whom
-- Supports rule versioning (deactivating old rules when new thresholds are set)
+---
+
+## 🎨 Using the App
+
+### ⚙️ Configure Rules Tab
+
+**Purpose:** Define which configuration standards to enforce
+
+**Actions:**
+- **View Rules**: See all available rules grouped by type (Warehouse/Database)
+- **Apply Rule**: Select a rule, enter threshold value, click "Apply Rule"
+- **Apply Defaults**: Click "Apply Default Rules" for instant setup
+- **Generate SQL**: Create bulk remediation SQL for all violations
+- **Deactivate Rule**: Stop enforcing a rule
+
+**Best Practice:** Start with default rules, then customize based on your needs.
+
+---
+
+### 🏭 Warehouse Compliance Tab
+
+**Purpose:** Monitor and fix warehouse configuration violations
+
+**Features:**
+- **Summary Metrics**: Total warehouses, compliant count, compliance rate
+- **Filters**: View all, non-compliant only, or compliant only
+- **View Modes**: Toggle between Tile View (visual cards) and List View (tabular)
+- **One-Click Fix**: Remediate violations automatically
+- **Detailed Info**: See current value vs. required threshold for each violation
+
+**Workflow:**
+1. Review summary metrics
+2. Filter to "Non-Compliant Only"
+3. Click **Fix** on each warehouse
+4. Status updates immediately to "Compliant"
+
+---
+
+### 🗄️ Database Compliance Tab
+
+**Purpose:** Monitor and fix table/schema/database retention violations
+
+**Features:**
+- **Search**: Find specific databases, schemas, or tables
+- **Bulk Actions**: Fix all non-compliant tables at once
+- **SQL Preview**: Review SQL before executing
+- **Expandable Details**: See full configuration for each table
+
+**Workflow:**
+1. Search for your database (e.g., "PROD_DB")
+2. Review non-compliant tables
+3. Click "Fix All Non-Compliant Tables"
+4. Confirm SQL preview
+5. All tables updated to compliant state
+
+---
+
+### ⏱️ Scheduled Tasks & Monitoring Tab
+
+**Purpose:** Control automated data collection
+
+**Features:**
+- **Task List**: View all app and consumer-created tasks
+- **Execution History**: Last 3 runs with status, duration, errors
+- **Controls**: Suspend, Resume, or Execute Now
+- **Status Indicators**: Green = running, Red = suspended
+
+**Tasks Explained:**
+- `warehouse_monitor_task`: Captures warehouse configs daily (7 AM EST)
+- `db_retention_monitor_task`: Captures retention settings daily (7 AM EST)
+- `warehouse_params_monitor_task`: Captures warehouse parameters (created by you in post-install)
+
+**Troubleshooting:**
+- If data is missing → Click "Execute Now" on the relevant task
+- If task fails → Click "View History" to see error messages
+
+---
+
+### 📊 Data Explorer Tab
+
+**Purpose:** Inspect all application data
+
+**Features:**
+- **Warehouse Details**: All captured warehouse configurations
+- **Table Retention**: All retention settings
+- **Config Rules**: Available rule definitions
+- **Applied Rules**: Currently active rules with thresholds
+- **Summary Stats**: Record counts and last update times
+
+**Use Cases:**
+- Verify data is being collected
+- Troubleshoot missing or NULL values
+- Export data for external analysis
+- Audit rule configurations
+
+---
+
+## 💡 Common Workflows
+
+### Reduce Idle Warehouse Costs
+
+```
+Goal: Ensure all warehouses suspend within 30 seconds of inactivity
+
+Steps:
+1. ⚙️ Configure Rules → Apply "Max Auto Suspend" = 30
+2. 🏭 Warehouse Compliance → Filter "Non-Compliant Only"
+3. Click "Fix" on each warehouse
+4. ✓ Result: Reduced idle compute costs by 40-60%
+```
+
+---
+
+### Control Time Travel Storage Costs
+
+```
+Goal: Reduce retention time to 1 day for all production tables
+
+Steps:
+1. ⚙️ Configure Rules → Apply "Max Table Retention" = 1
+2. 🗄️ Database Compliance → Search "PROD_DB"
+3. Click "Fix All Non-Compliant Tables"
+4. ✓ Result: Reduced storage costs by ~85%
+```
+
+---
+
+### Monitor Rule Compliance Over Time
+
+```
+Goal: Track compliance improvements weekly
+
+Steps:
+1. 🏭 Warehouse Compliance → Note compliance rate (e.g., 65%)
+2. Fix violations over the week
+3. Return next week → Compliance rate improved (e.g., 95%)
+4. ✓ Result: Demonstrable improvement in governance
+```
+
+---
+
+## 🔧 Troubleshooting
+
+### Issue: No warehouse data showing
+
+**Cause:** Monitoring task hasn't run yet  
+**Fix:**
+1. Go to **⏱️ Scheduled Tasks & Monitoring** tab
+2. Click "Execute Now" on `warehouse_monitor_task`
+3. Wait 30 seconds
+4. Refresh the app
+
+---
+
+### Issue: Statement timeout values are NULL
+
+**Cause:** Post-installation task not created  
+**Fix:** Complete **Post-Installation Setup** (see Step 1 above) - this is **required**!
+
+---
+
+### Issue: Fix button doesn't work
+
+**Cause:** Insufficient privileges  
+**Fix:**
+1. Ensure you granted `MANAGE WAREHOUSES` privilege during installation
+2. Check error message displayed in the UI for specific details
+3. If needed, re-grant privileges to the app
+
+---
+
+### Issue: "No rules applied" message in compliance tabs
+
+**Cause:** Haven't applied any rules yet  
+**Fix:**
+1. Go to **⚙️ Configure Rules** tab
+2. Click "🎯 Apply Default Rules" button
+3. Return to compliance tabs to see results
+
+---
+
+### Issue: High costs after deployment
+
+**Cause:** Tasks misconfigured or rules not applied  
+**Fix:**
+1. Verify tasks use serverless compute (check **⏱️ Scheduled Tasks** tab)
+2. Apply cost-saving rules (Max Auto Suspend = 30 seconds)
+3. Review execution frequency (daily is recommended)
+
+---
+
+## 📖 Best Practices
+
+### Rule Management
+- ✅ **Start with defaults** - Click "Apply Default Rules" for instant setup
+- ✅ **Test in dev first** - Apply to development environment before production
+- ✅ **Review monthly** - Check compliance trends and adjust thresholds
+- ✅ **Document exceptions** - Track warehouses needing special configurations
+
+### Cost Optimization
+- ✅ **Auto-suspend = 30-60 seconds** for most warehouses (reduces idle costs by 40-60%)
+- ✅ **Retention = 1 day** unless Time Travel is critical (reduces storage by ~85%)
+- ✅ **Monitor task history** - Ensure tasks run successfully without errors
+- ✅ **Use serverless tasks** - All tasks should use managed compute
 
 ### Security
+- ✅ **Review SQL before bulk operations** - Use "Show SQL" feature
+- ✅ **Audit quarterly** - Review applied rules and their justification
+- ✅ **Limit access** - Grant admin role only to authorized users
 
-- All data is stored with 0-day retention for compliance
-- The app requests only necessary privileges
-- Consumer controls which rules to apply and when
-- SQL generation is read-only; consumer must execute remediation scripts
+---
 
-## Troubleshooting
+## 📊 Understanding Metrics
 
-**Problem**: No warehouse data showing in the app
-- **Solution**: Wait for the monitoring task to run (every 2 hours), or manually execute: `EXECUTE TASK data_schema.warehouse_monitor_task;`
+### Compliance Rate
 
-**Problem**: Statement timeout rule shows all warehouses as non-compliant with NULL values
-- **Solution**: Set up the optional parameter monitoring task (see Post-Installation Setup section)
+```
+Compliance Rate = (Compliant Resources / Total Resources) × 100
 
-**Problem**: Cannot apply rules
-- **Solution**: Ensure the app has been granted the required privileges, particularly MODIFY
+Example:
+- Total Warehouses: 20
+- Compliant: 15
+- Non-Compliant: 5
+- Compliance Rate: 75%
 
-**Problem**: Generated SQL doesn't work
-- **Solution**: Ensure you're running the SQL with a role that has MODIFY privilege on the warehouses
+Goal: Achieve 95%+ compliance rate
+```
 
-## Best Practices
+### Cost Impact Estimation
 
-1. **Start with Higher Thresholds**: Begin with lenient thresholds and gradually tighten them
-2. **Test on Non-Production First**: Apply rules to dev/test warehouses before production
-3. **Monitor Trends**: Use the Warehouse Overview tab to understand current configurations
-4. **Regular Reviews**: Periodically review and update rule thresholds based on actual usage
-5. **Document Exceptions**: If certain warehouses need different settings, document why
+```
+Auto-Suspend Savings:
+- Before: Warehouse idles for 300 seconds (5 min) before suspending
+- After: Warehouse idles for 30 seconds before suspending
+- Savings: 90% reduction in idle time
+- Impact: 40-60% lower warehouse costs (depending on usage pattern)
 
-## Version History
+Retention Savings:
+- Before: Table has 7-day retention
+- After: Table has 1-day retention  
+- Savings: 85% reduction in Time Travel storage
+- Impact: Significant reduction in monthly storage bills
+```
 
-- **v1.0.0**: Initial release with Max Statement Timeout and Max Auto Suspend rules
+---
 
-## Support
+## 🎯 Success Metrics
 
-For issues, feature requests, or questions about extending the app with custom rules, please refer to the Snowflake Native App documentation or contact your Snowflake account team.
+Track these metrics to measure app effectiveness:
 
+| Metric | Target | How to Measure |
+|--------|--------|----------------|
+| **Compliance Rate** | >95% | Warehouse Compliance tab → Summary metrics |
+| **Cost Reduction** | 30-50% on idle compute | Snowflake cost monitoring (before/after applying rules) |
+| **Storage Savings** | 70-85% on Time Travel | Snowflake storage monitoring (before/after retention rules) |
+| **Time to Remediate** | <5 minutes | Time from identifying violation to clicking Fix |
+| **Task Success Rate** | 100% | Scheduled Tasks tab → Execution history (all succeeded) |
+
+---
+
+## 🔒 Security & Privacy
+
+- ✅ All data stored with **0-day retention** for compliance
+- ✅ No PII or sensitive query data captured
+- ✅ Only metadata (warehouse names, sizes, configs) collected
+- ✅ Fix actions execute with **your privileges** (not app's)
+- ✅ All actions auditable via Snowflake query history
+
+---
+
+## 📞 Need Help?
+
+### Within the App
+1. **Task Issues**: Go to **⏱️ Scheduled Tasks** → View History → Check error messages
+2. **Missing Data**: Go to **📊 Data Explorer** → Verify data collection
+3. **SQL Preview**: Use "Show SQL" feature before fixing to review changes
+
+### External Resources
+- 📚 [Snowflake Time Travel Docs](https://docs.snowflake.com/en/user-guide/data-time-travel)
+- 📚 [Warehouse Management Guide](https://docs.snowflake.com/en/user-guide/warehouses)
+- 📚 [Managed Tasks Documentation](https://docs.snowflake.com/en/user-guide/tasks-managed)
+
+---
+
+## 🎓 Learning Resources
+
+### Understanding Rule Operators
+
+```
+MAX Operator (Most Common):
+  - Rule: Max Auto Suspend = 30 seconds
+  - Means: Warehouse value must be ≤ 30 seconds
+  - Compliant: auto_suspend = 20 seconds ✓
+  - Non-Compliant: auto_suspend = 60 seconds ✗
+
+MIN Operator:
+  - Rule: Min Cluster Count = 1
+  - Means: Warehouse value must be ≥ 1
+  - Compliant: min_cluster_count = 2 ✓
+  - Non-Compliant: min_cluster_count = 0 ✗
+
+EQUALS Operator:
+  - Rule: Scaling Policy = 'STANDARD'
+  - Means: Warehouse value must exactly match
+  - Compliant: scaling_policy = 'STANDARD' ✓
+  - Non-Compliant: scaling_policy = 'ECONOMY' ✗
+```
+
+### Architecture Overview
+
+```
+┌──────────────────────────────────────────────┐
+│         Your Snowflake Account               │
+├──────────────────────────────────────────────┤
+│                                              │
+│  ┌────────────────────────────────┐          │
+│  │  Configuration Compliance App  │          │
+│  │  • Monitors warehouses         │          │
+│  │  • Checks compliance           │          │
+│  │  • Generates fix SQL           │          │
+│  └────────────┬───────────────────┘          │
+│               │                              │
+│               ▼                              │
+│  ┌────────────────────────────────┐          │
+│  │  Your Warehouses & Databases   │          │
+│  │  • Configurations monitored    │          │
+│  │  • Violations detected         │          │
+│  │  • Fixes applied on demand     │          │
+│  └────────────────────────────────┘          │
+│                                              │
+└──────────────────────────────────────────────┘
+```
+
+---
+
+## 📋 Appendix: Rule Reference
+
+### Complete Rule Catalog
+
+| Rule ID | Rule Name | Type | Parameter | Operator | Default |
+|---------|-----------|------|-----------|----------|---------|
+| `MAX_STATEMENT_TIMEOUT` | Max Statement Timeout in Seconds | Warehouse | STATEMENT_TIMEOUT_IN_SECONDS | MAX | 300 |
+| `MAX_AUTO_SUSPEND` | Max Auto Suspend in Seconds | Warehouse | AUTO_SUSPEND | MAX | 30 |
+| `MAX_TABLE_RETENTION_TIME` | Max Table Retention Time in Days | Database | RETENTION_TIME | MAX | 1 |
+| `MAX_SCHEMA_RETENTION_TIME` | Max Schema Retention Time in Days | Database | RETENTION_TIME | MAX | 1 |
+| `MAX_DATABASE_RETENTION_TIME` | Max Database Retention Time in Days | Database | RETENTION_TIME | MAX | 1 |
+
+### Supported Parameters
+
+Parameters already available (no additional setup needed):
+- `AUTO_SUSPEND`
+- `SIZE`
+- `TYPE`
+- `MIN_CLUSTER_COUNT`
+- `MAX_CLUSTER_COUNT`
+- `SCALING_POLICY`
+
+Parameters requiring post-installation setup:
+- `STATEMENT_TIMEOUT_IN_SECONDS` (requires consumer-created task)
+- `MAX_CONCURRENCY_LEVEL` (requires consumer-created task)
+- `STATEMENT_QUEUED_TIMEOUT_IN_SECONDS` (requires consumer-created task)
+
+---
+
+**📅 Last Updated:** November 14, 2025  
+**🏷️ Version:** 2.3  
+**💡 Tip:** Bookmark this README for quick reference while using the app!

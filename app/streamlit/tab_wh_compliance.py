@@ -10,7 +10,7 @@ from compliance import check_compliance, generate_fix_sql, generate_post_fix_upd
 from ui_utils import render_refresh_button
 
 
-def render_compliance_view_tab(session):
+def render_wh_compliance_view_tab(session):
     """Render the Compliance View tab"""
     # Initialize session state for fixed warehouses
     if 'fixed_warehouses' not in st.session_state:
@@ -19,7 +19,7 @@ def render_compliance_view_tab(session):
     # Refresh button in top right
     col_title, col_refresh = render_refresh_button("tab2")
     with col_title:
-        st.markdown("### Warehouse Compliance Status")
+        st.markdown("### 🏭 Warehouse Configuration Health")
     with col_refresh:
         if st.button("🔄", key="refresh_tab2", help="Refresh data"):
             # Clear fixed warehouses on refresh
@@ -220,39 +220,68 @@ def _render_tile_view(session, compliance_data, view_filter):
                         """, unsafe_allow_html=True)
                 
                 with col2:
-                    if st.button("Fix", key=f"fix_{warehouse_name}", type="primary", use_container_width=True):
-                        # Execute the fix SQL
-                        try:
-                            # Step 1: Run the fix SQL
+                    # Check if any violation has fix_button or fix_sql enabled
+                    has_any_fix_button = any(v.get('has_fix_button', False) for v in wh_comp['violations'])
+                    has_any_fix_sql = any(v.get('has_fix_sql', False) for v in wh_comp['violations'])
+                    
+                    if has_any_fix_button or has_any_fix_sql:
+                        if has_any_fix_button:
+                            if st.button("Fix", key=f"fix_{warehouse_name}", type="primary", use_container_width=True):
+                                # Execute the fix SQL
+                                try:
+                                    # Step 1: Run the fix SQL
+                                    for violation in wh_comp['violations']:
+                                        if violation.get('has_fix_button', False):
+                                            sql = generate_fix_sql(
+                                                warehouse_name,
+                                                violation['parameter'],
+                                                violation['threshold_value']
+                                            )
+                                            execute_sql(session, sql)
+                                            update_sql = generate_post_fix_update_sql(
+                                                warehouse_name,
+                                                violation['parameter'],
+                                                violation['threshold_value']
+                                            )
+                                            execute_sql(session, update_sql)
+                                    
+                                    # Step 2: Mark as successfully fixed in session state
+                                    st.session_state.fixed_warehouses[warehouse_name] = {
+                                        'success': True,
+                                        'error': None
+                                    }
+                                    st.rerun()
+                                    
+                                except Exception as e:
+                                    # Step 3: Mark as failed with error message
+                                    st.session_state.fixed_warehouses[warehouse_name] = {
+                                        'success': False,
+                                        'error': str(e)
+                                    }
+                                    st.rerun()
+                        
+                        if has_any_fix_sql:
+                            if st.button("Show SQL", key=f"btn_show_sql_{warehouse_name}", use_container_width=True):
+                                st.session_state[f'show_sql_{warehouse_name}'] = True
+                        
+                        # Display SQL if requested
+                        if st.session_state.get(f'show_sql_{warehouse_name}', False):
+                            sql_statements = []
                             for violation in wh_comp['violations']:
-                                sql = generate_fix_sql(
-                                    warehouse_name,
-                                    violation['parameter'],
-                                    violation['threshold_value']
-                                )
-                                execute_sql(session, sql)
-                                update_sql = generate_post_fix_update_sql(
-                                    warehouse_name,
-                                    violation['parameter'],
-                                    violation['threshold_value']
-                                )
-                                execute_sql(session, update_sql)
+                                if violation.get('has_fix_sql', False):
+                                    sql = generate_fix_sql(
+                                        warehouse_name,
+                                        violation['parameter'],
+                                        violation['threshold_value']
+                                    )
+                                    sql_statements.append(sql)
                             
-
-                            
-                            # Step 3: Mark as successfully fixed in session state
-                            st.session_state.fixed_warehouses[warehouse_name] = {
-                                'success': True,
-                                'error': None
-                            }
-                            st.rerun()
-                            
-                        except Exception as e:
-                            # Step 4: Mark as failed with error message
-                            st.session_state.fixed_warehouses[warehouse_name] = {
-                                'success': False,
-                                'error': str(e)
-                            }
-                            st.rerun()
+                            if sql_statements:
+                                combined_sql = "\n\n".join(sql_statements)
+                                st.code(combined_sql, language="sql")
+                                
+                                if st.button("Hide SQL", key=f"btn_hide_sql_{warehouse_name}"):
+                                    st.session_state[f'show_sql_{warehouse_name}'] = False
+                                    st.rerun()
             
             st.markdown("<br>", unsafe_allow_html=True)

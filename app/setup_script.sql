@@ -33,15 +33,36 @@ CREATE TABLE IF NOT EXISTS data_schema.warehouse_details (
 );
 
 
+-- Create table to store database, schema, and table retention details
+CREATE TABLE IF NOT EXISTS data_schema.database_retention_details (
+    object_type VARCHAR(50) NOT NULL,  -- 'DATABASE', 'SCHEMA', 'TABLE'
+    database_name VARCHAR(255),
+    schema_name VARCHAR(255),
+    table_name VARCHAR(255),
+    table_type VARCHAR(50),
+    data_retention_time_in_days NUMBER,
+    owner VARCHAR(255),
+    created_on TIMESTAMP_LTZ,
+    last_altered TIMESTAMP_LTZ,
+    row_count NUMBER,
+    bytes NUMBER,
+    comment VARCHAR(500),
+    capture_timestamp TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP()
+);
+
+
 -- Create table to store configuration rules
 CREATE TABLE IF NOT EXISTS data_schema.config_rules (
     rule_id VARCHAR(100) PRIMARY KEY,
     rule_name VARCHAR(255) NOT NULL,
     rule_description VARCHAR(500),
+    rule_type VARCHAR(50) NOT NULL,  -- 'Warehouse', 'Database'
     warehouse_parameter VARCHAR(100) NOT NULL,
     comparison_operator VARCHAR(10) NOT NULL,  -- 'MAX', 'MIN', 'EQUALS'
     unit VARCHAR(50),  -- 'seconds', 'minutes', etc.
     is_active BOOLEAN DEFAULT TRUE,
+    has_fix_button BOOLEAN DEFAULT FALSE,
+    has_fix_sql BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
     updated_at TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP()
 );
@@ -60,12 +81,21 @@ CREATE TABLE IF NOT EXISTS data_schema.applied_rules (
 
 
 -- Insert predefined configuration rules
-INSERT INTO data_schema.config_rules (rule_id, rule_name, rule_description, warehouse_parameter, comparison_operator, unit)
-SELECT 'MAX_STATEMENT_TIMEOUT', 'Max Statement Timeout in Seconds', 'Maximum allowed statement timeout for warehouses', 'STATEMENT_TIMEOUT_IN_SECONDS', 'MAX', 'seconds'
+INSERT INTO data_schema.config_rules (rule_id, rule_name, rule_description, rule_type, warehouse_parameter, comparison_operator, unit, has_fix_button, has_fix_sql)
+SELECT 'MAX_STATEMENT_TIMEOUT', 'Max Statement Timeout in Seconds', 'Maximum allowed statement timeout for warehouses', 'Warehouse', 'STATEMENT_TIMEOUT_IN_SECONDS', 'MAX', 'seconds', TRUE, TRUE
 WHERE NOT EXISTS (SELECT 1 FROM data_schema.config_rules WHERE rule_id = 'MAX_STATEMENT_TIMEOUT')
 UNION ALL
-SELECT 'MAX_AUTO_SUSPEND', 'Max Auto Suspend in Seconds', 'Maximum allowed auto suspend time for warehouses', 'AUTO_SUSPEND', 'MAX', 'seconds'
-WHERE NOT EXISTS (SELECT 1 FROM data_schema.config_rules WHERE rule_id = 'MAX_AUTO_SUSPEND');
+SELECT 'MAX_AUTO_SUSPEND', 'Max Auto Suspend in Seconds', 'Maximum allowed auto suspend time for warehouses', 'Warehouse', 'AUTO_SUSPEND', 'MAX', 'seconds', TRUE, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM data_schema.config_rules WHERE rule_id = 'MAX_AUTO_SUSPEND')
+UNION ALL
+SELECT 'MAX_TABLE_RETENTION_TIME', 'Max Table Retention Time in Days', 'Maximum allowed data retention time for tables', 'Database', 'DATA_RETENTION_TIME_IN_DAYS', 'MAX', 'days', FALSE, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM data_schema.config_rules WHERE rule_id = 'MAX_TABLE_RETENTION_TIME')
+UNION ALL
+SELECT 'MAX_SCHEMA_RETENTION_TIME', 'Max Schema Retention Time in Days', 'Maximum allowed data retention time for schemas', 'Database', 'DATA_RETENTION_TIME_IN_DAYS', 'MAX', 'days', FALSE, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM data_schema.config_rules WHERE rule_id = 'MAX_SCHEMA_RETENTION_TIME')
+UNION ALL
+SELECT 'MAX_DATABASE_RETENTION_TIME', 'Max Database Retention Time in Days', 'Maximum allowed data retention time for databases', 'Database', 'DATA_RETENTION_TIME_IN_DAYS', 'MAX', 'days', FALSE, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM data_schema.config_rules WHERE rule_id = 'MAX_DATABASE_RETENTION_TIME');
 
 
 -- Create view for easier data access
@@ -73,18 +103,19 @@ CREATE OR REPLACE VIEW data_schema.warehouse_monitor_view AS
 SELECT * FROM data_schema.warehouse_details
 ORDER BY name,capture_timestamp DESC;
 
--- CREATE WAREHOUSE TO BE USED BY STREAMLIT AND TASKS
+-- CREATE WAREHOUSE TO BE USED BY STREAMLIT ONLY
 CREATE WAREHOUSE IF NOT EXISTS CONFIG_RULES_VW
   WAREHOUSE_SIZE = 'XSMALL'
   AUTO_SUSPEND = 30
   AUTO_RESUME = TRUE
+  STATEMENT_TIMEOUT_IN_SECONDS = 600
   INITIALLY_SUSPENDED = TRUE;
 
 
--- Create task in data_schema (tasks cannot be in versioned schemas)
+-- Create managed task in data_schema (tasks cannot be in versioned schemas)
+-- Managed tasks are serverless and use Snowflake-managed compute
 CREATE OR REPLACE TASK data_schema.warehouse_monitor_task
-    USER_TASK_TIMEOUT_MS = 3600000
-    WAREHOUSE = CONFIG_RULES_VW
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
     SCHEDULE = 'USING CRON 0 7 * * * America/New_York'
 AS
 BEGIN
@@ -123,6 +154,94 @@ ALTER TASK data_schema.warehouse_monitor_task RESUME;
 
 --EXECUTE TASK data_schema.warehouse_monitor_task;
 
+
+-- Create managed task to monitor database, schema, and table retention times
+-- Managed tasks are serverless and use Snowflake-managed compute
+CREATE OR REPLACE TASK data_schema.db_retention_monitor_task
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    SCHEDULE = 'USING CRON 0 7 * * * America/New_York'
+AS
+BEGIN
+  -- Truncate the table before inserting new data
+  TRUNCATE TABLE data_schema.database_retention_details;
+  
+  -- Insert database retention details
+  INSERT INTO data_schema.database_retention_details (
+    object_type, capture_timestamp, database_name, schema_name, table_name,
+    data_retention_time_in_days, owner, created_on, last_altered, comment
+  )
+  SELECT 
+    'DATABASE' as object_type,
+    CURRENT_TIMESTAMP(),
+    database_name,
+    NULL as schema_name,
+    NULL as table_name,
+    retention_time,
+    database_owner,
+    created,
+    last_altered,
+    comment
+  FROM SNOWFLAKE.ACCOUNT_USAGE.DATABASES
+  WHERE deleted IS NULL 
+    AND type not in ('APPLICATION','APPLICATION PACKAGE','IMPORTED DATABASE');
+
+  -- Insert schema retention details
+  INSERT INTO data_schema.database_retention_details (
+    object_type, capture_timestamp, database_name, schema_name, table_name,
+    data_retention_time_in_days, owner, created_on, last_altered, comment
+  )
+  SELECT 
+    'SCHEMA' as object_type,
+    CURRENT_TIMESTAMP(),
+    catalog_name,
+    schema_name,
+    NULL as table_name,
+    retention_time,
+    schema_owner,
+    created,
+    last_altered,
+    comment
+  FROM SNOWFLAKE.ACCOUNT_USAGE.SCHEMATA
+  WHERE deleted IS NULL 
+    AND catalog_name in (
+      select database_name from data_schema.database_retention_details
+      where object_type = 'DATABASE'
+    );
+  
+  -- Insert table retention details
+  INSERT INTO data_schema.database_retention_details (
+    object_type, capture_timestamp, database_name, schema_name, table_name, table_type,
+    data_retention_time_in_days, owner, created_on, last_altered, 
+    row_count, bytes, comment
+  )
+  SELECT 
+    'TABLE' as object_type,
+    CURRENT_TIMESTAMP(),
+    table_catalog,
+    table_schema,
+    table_name,
+    table_type,
+    retention_time,
+    table_owner,
+    created,
+    last_altered,
+    row_count,
+    bytes,
+    comment
+  FROM SNOWFLAKE.ACCOUNT_USAGE.TABLES
+  WHERE deleted IS NULL
+    AND table_type IN ('BASE TABLE', 'TRANSIENT')
+    AND table_catalog in (
+      select database_name from data_schema.database_retention_details
+      where object_type = 'DATABASE'
+    );
+END;
+
+-- Resume the task
+ALTER TASK data_schema.db_retention_monitor_task RESUME;
+
+EXECUTE TASK data_schema.db_retention_monitor_task;
+
 -- Create internal stage for Streamlit files
 CREATE STAGE IF NOT EXISTS core.streamlit_stage
   DIRECTORY = (ENABLE = TRUE);
@@ -149,9 +268,10 @@ GRANT USAGE ON STREAMLIT core.config_rules_app TO APPLICATION ROLE config_rules_
 GRANT READ ON STAGE core.streamlit_stage TO APPLICATION ROLE config_rules_admin;
 GRANT WRITE ON STAGE core.streamlit_stage TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TASK data_schema.warehouse_monitor_task TO APPLICATION ROLE config_rules_admin;
+GRANT ALL ON TASK data_schema.db_retention_monitor_task TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON WAREHOUSE CONFIG_RULES_VW TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.warehouse_details TO APPLICATION ROLE config_rules_admin;
+GRANT ALL ON TABLE data_schema.database_retention_details TO APPLICATION ROLE config_rules_admin;
 GRANT SELECT ON VIEW data_schema.warehouse_monitor_view TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.config_rules TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.applied_rules TO APPLICATION ROLE config_rules_admin;
-

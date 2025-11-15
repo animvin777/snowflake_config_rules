@@ -22,4 +22,6 @@ privileges:
       description: "Allows the app to monitor and manage warehouses in the consumer account"
   - EXECUTE MANAGED TASK:
       description: "Allows the app to execute managed tasks in the consumer account"
+  - IMPORTED PRIVILEGES ON SNOWFLAKE DB:
+      description: "Allows the app to query metadata about all databases and tables in the account"
 

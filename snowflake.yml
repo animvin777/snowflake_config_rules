@@ -13,9 +13,9 @@ entities:
     artifacts:
       - src: app/*
         dest: ./
-    # meta:
-    #   post_deploy:
-    #     - sql_script: scripts/post_deploy.sql
+    #meta:
+    #  post_deploy:
+    #    - sql_script: scripts/post_deploy.sql
     
     
   # Application - instance of the app
