@@ -113,7 +113,48 @@ def render_details_tab(session):
         except Exception as e:
             st.error(f"Error loading applied rules: {str(e)}")
     
-    # Table 5: Tasks Information
+    # Table 5: Applied Tag Rules
+    with st.expander("Applied Tag Rules", expanded=False):
+        try:
+            query = """
+            SELECT 
+                applied_tag_rule_id, tag_name, object_type,
+                applied_at, applied_by, is_active
+            FROM data_schema.applied_tag_rules
+            ORDER BY applied_at DESC
+            """
+            df = session.sql(query).to_pandas()
+            
+            if not df.empty:
+                st.markdown(f"**Total Records:** {len(df)}")
+                st.dataframe(df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No tag rules have been applied yet.")
+        except Exception as e:
+            st.error(f"Error loading applied tag rules: {str(e)}")
+    
+    # Table 6: Tag Compliance Details
+    with st.expander("Tag Compliance Details", expanded=False):
+        try:
+            query = """
+            SELECT 
+                object_type, object_database, object_schema, object_name,
+                tag_name, tag_value, capture_timestamp
+            FROM data_schema.tag_compliance_details
+            ORDER BY capture_timestamp DESC, object_type, object_name, tag_name
+            LIMIT 100
+            """
+            df = session.sql(query).to_pandas()
+            
+            if not df.empty:
+                st.markdown(f"**Total Records:** {len(df)}")
+                st.dataframe(df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No tag compliance data available. The tag_monitor_task will populate this table.")
+        except Exception as e:
+            st.error(f"Error loading tag compliance details: {str(e)}")
+    
+    # Table 7: Tasks Information
     with st.expander("Tasks", expanded=False):
         try:
             query = """
@@ -146,7 +187,7 @@ def render_details_tab(session):
     st.markdown("---")
     render_section_header("Summary Statistics", "chart-icon")
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         render_count_metric(session, "SELECT COUNT(*) as cnt FROM data_schema.warehouse_details", "Warehouse Records")
@@ -159,4 +200,7 @@ def render_details_tab(session):
     
     with col4:
         render_count_metric(session, "SELECT COUNT(*) as cnt FROM data_schema.applied_rules WHERE is_active = TRUE", "Applied Rules")
+    
+    with col5:
+        render_count_metric(session, "SELECT COUNT(*) as cnt FROM data_schema.applied_tag_rules WHERE is_active = TRUE", "Applied Tag Rules")
 

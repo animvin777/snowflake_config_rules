@@ -62,7 +62,7 @@ def render_wh_compliance_view_tab(session):
             with col4:
                 render_filter_button("Compliance Rate", f"{compliance_rate:.1f}%", "filter_rate_btn", "Non-Compliant First", "wh_compliance_filter")
             
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.html("<br>")
             
             # Search box
             search_term = st.text_input("Search warehouses or rules", placeholder="Type warehouse name or rule name...", key="wh_search")
@@ -106,25 +106,25 @@ def _render_tile_view(session, compliance_data, view_filter, search_term=""):
             
             # Display success or error card
             if fix_status['success']:
-                st.markdown(f"""
+                st.html(f"""
                     <div class="warehouse-compact compliant">
                         <div class="warehouse-name">{warehouse_name}</div>
                         <div class="warehouse-info" style="color: #2E7D32; font-weight: 500;">
                             ✓ Configuration Updated
                         </div>
                     </div>
-                """, unsafe_allow_html=True)
+                """)
             else:
-                st.markdown(f"""
+                st.html(f"""
                     <div class="warehouse-compact non-compliant">
                         <div class="warehouse-name">{warehouse_name}</div>
                         <div class="warehouse-info" style="color: #C62828;">
                             ✗ Fix Failed: {fix_status['error']}
                         </div>
                     </div>
-                """, unsafe_allow_html=True)
+                """)
             
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.html("<br>")
             continue
         
         # Display warehouse card - compact version
@@ -149,13 +149,26 @@ def _render_tile_view(session, compliance_data, view_filter, search_term=""):
                 with col1:
                     for violation in wh_comp['violations']:
                         current_val = violation['current_value'] if violation['current_value'] is not None else "Not Set"
-                        st.markdown(f"""
-                            <div class="warehouse-violations">
-                                <strong>{violation['rule_name']}:</strong> 
-                                Current = <code>{current_val}</code>, 
-                                Required {violation['operator']} = <code>{int(violation['threshold_value'])} {violation['unit']}</code>
+                        st.html(f"""
+                            <div class="violation-item">
+                                <div>
+                                    <div class="violation-rule-name">{violation['rule_name']}</div>
+                                    <div class="violation-details">
+                                        <div class="violation-value">
+                                            <span class="violation-label">Current:</span>
+                                            <span class="violation-code">{current_val}</span>
+                                        </div>
+                                        <div class="violation-value">
+                                            <span class="violation-operator">{violation['operator']}</span>
+                                        </div>
+                                        <div class="violation-value">
+                                            <span class="violation-label">Required:</span>
+                                            <span class="violation-code">{int(violation['threshold_value'])} {violation['unit']}</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        """, unsafe_allow_html=True)
+                        """)
                 
                 with col2:
                     # Check if any violation has fix_button or fix_sql enabled
@@ -222,4 +235,4 @@ def _render_tile_view(session, compliance_data, view_filter, search_term=""):
                                     st.session_state[f'show_sql_{warehouse_name}'] = False
                                     st.rerun()
             
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.html("<br>")

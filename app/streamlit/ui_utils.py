@@ -13,7 +13,7 @@ def load_css():
     css_file = Path(__file__).parent / "styles.css"
     if css_file.exists():
         with open(css_file) as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+            st.html(f"<style>{f.read()}</style>")
     else:
         st.warning("CSS file not found. Using default styles.")
 
@@ -92,7 +92,7 @@ def render_section_header(title, icon_class=""):
         icon_class: CSS class for icon (e.g., 'chart-icon', 'wh-icon')
     """
     if icon_class:
-        st.markdown(f'<h3><span class="{icon_class}"></span> {title}</h3>', unsafe_allow_html=True)
+        st.html(f'<h3><span class="{icon_class}"></span> {title}</h3>')
     else:
         st.markdown(f"### {title}")
 
@@ -182,21 +182,32 @@ def filter_by_search(items, search_term, *search_fields):
     return filtered
 
 
-def render_rule_card(rule, rule_type_class, rule_type_icon):
+def render_rule_card(rule, rule_type_class, rule_type_icon, violation_count=None):
     """Render an applied rule card with consistent styling
     
     Args:
         rule: Rule dictionary with RULE_NAME, THRESHOLD_VALUE, etc.
         rule_type_class: CSS class ('warehouse' or 'database')
         rule_type_icon: HTML for icon
+        violation_count: Optional number of violations for this rule
     """
+    # Build violation count display if provided
+    violation_html = ""
+    if violation_count is not None:
+        if violation_count > 0:
+            violation_html = f'<span class="violation-count"><span class="warning-icon"></span> {violation_count} violation{"s" if violation_count != 1 else ""}</span>'
+        else:
+            violation_html = '<span class="compliant-count"><span class="check-icon"></span> All compliant</span>'
+    
     st.markdown(f"""
         <div class="rule-card {rule_type_class}">
             <h4 style="margin-top:0;">
                 {rule_type_icon} {rule['RULE_NAME']}
                 <span class="rule-type-label {rule_type_class}">{rule['RULE_TYPE']}</span>
+                {violation_html}
             </h4>
             <p style="margin-bottom:0.5rem;"><strong>Threshold:</strong> {int(rule['THRESHOLD_VALUE'])} {rule['UNIT']} | <strong>Applied:</strong> {rule['APPLIED_AT'].strftime('%Y-%m-%d %H:%M')}</p>
         </div>
     """, unsafe_allow_html=True)
+
 

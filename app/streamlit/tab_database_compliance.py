@@ -69,7 +69,7 @@ def render_database_compliance_tab(session):
         compliance_rate = (compliant_objects / total_objects * 100) if total_objects > 0 else 0
         render_filter_button("Compliance Rate", f"{compliance_rate:.1f}%", "filter_rate_objects_btn", "Non-Compliant First", "db_compliance_filter")
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.html("<br>")
     
     # Object type filter and search in one row
     col1, col2 = st.columns([1, 3])
@@ -155,13 +155,26 @@ def render_database_compliance_tab(session):
                 
                 with col1:
                     for violation in obj_comp['violations']:
-                        st.markdown(f"""
-                            <div class="warehouse-violations">
-                                <strong>{violation['rule_name']}:</strong> 
-                                Current = <code>{violation['current_value']} {violation['unit']}</code>, 
-                                Required {violation['operator']} = <code>{violation['threshold_value']} {violation['unit']}</code>
+                        st.html(f"""
+                            <div class="violation-item">
+                                <div>
+                                    <div class="violation-rule-name">{violation['rule_name']}</div>
+                                    <div class="violation-details">
+                                        <div class="violation-value">
+                                            <span class="violation-label">Current:</span>
+                                            <span class="violation-code">{violation['current_value']} {violation['unit']}</span>
+                                        </div>
+                                        <div class="violation-value">
+                                            <span class="violation-operator">{violation['operator']}</span>
+                                        </div>
+                                        <div class="violation-value">
+                                            <span class="violation-label">Required:</span>
+                                            <span class="violation-code">{violation['threshold_value']} {violation['unit']}</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        """, unsafe_allow_html=True)
+                        """)
                 
                 with col2:
                     # Create unique key for buttons
@@ -220,7 +233,7 @@ def render_database_compliance_tab(session):
                             st.session_state[f'show_sql_{obj_key}'] = False
                             st.rerun()
             
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.html("<br>")
     
     # Bulk fix option for all non-compliant objects
     if view_filter == "Non-Compliant Only" and filtered_data:

@@ -3,8 +3,9 @@ Task Management Tab
 Handles the display and control of all tasks in the application
 """
 
+import time
 import streamlit as st
-from database import get_all_tasks, get_task_history, suspend_task, resume_task, execute_task
+from database import execute_sql, get_all_tasks, get_task_history, suspend_task, resume_task, execute_task, wait_for_task_completion
 from ui_utils import render_refresh_button, render_section_header
 import pandas as pd
 
@@ -34,7 +35,24 @@ def render_task_management_tab(session):
         if not tasks_df.empty:
             st.markdown("#### Application Tasks")
             
-            # Display each task in a card
+            st.markdown("---")
+            
+            # Create table header
+            st.html("""
+                <table class="task-table">
+                    <thead>
+                        <tr>
+                            <th>Task Name</th>
+                            <th>State</th>
+                            <th>Schedule</th>
+                            <th>Owner</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                </table>
+            """)
+            
+            # Display each task in table rows
             for idx, task in tasks_df.iterrows():
                 # Handle both uppercase and lowercase column names
                 task_name = task.get('"name"', '')
@@ -48,91 +66,111 @@ def render_task_management_tab(session):
                 # Create unique key using index
                 unique_key = f"{idx}_{task_name}"
                 
-                st.markdown(f"""
-                    <div class="rule-card">
-                        <h4 style="margin-top:0;">{task_name}</h4>
-                        <p style="margin-bottom:0.5rem;">
-                            <strong>State:</strong> <span style="color: {'green' if task_state == 'started' else 'red'};">{task_state.upper()}</span> | 
-                            <strong>Schedule:</strong> {task_schedule}
-                        </p>
-                        <p style="margin-bottom:0.5rem;"><strong>Owner:</strong> {task_owner}</p>
-                    </div>
-                """, unsafe_allow_html=True)
+                # Determine state styling
+                state_class = "task-state-started" if task_state == 'started' else "task-state-suspended"
                 
-                col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
+                # Create table row
+                col_name, col_state, col_schedule, col_owner, col_actions = st.columns([2, 1, 2, 1.5, 2.5])
                 
-                with col1:
-                    if task_state == 'started':
-                        if st.button("Suspend", key=f"suspend_{unique_key}", use_container_width=True):
-                            try:
-                                suspend_task(session, full_task_name)
-                                st.success(f"Task {task_name} suspended")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error: {str(e)}")
-                    else:
-                        if st.button("Resume", key=f"resume_{unique_key}", use_container_width=True):
-                            try:
-                                resume_task(session, full_task_name)
-                                st.success(f"Task {task_name} resumed")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error: {str(e)}")
+                with col_name:
+                    st.markdown(f"**{task_name}**")
                 
-                with col2:
-                    if st.button("Execute Now", key=f"execute_{unique_key}", use_container_width=True):
-                        try:
-                            execute_task(session, full_task_name)
-                            st.success(f"Task {task_name} executed")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error: {str(e)}")
+                with col_state:
+                    st.html(f'<span class="{state_class}">{task_state.upper()}</span>')
                 
-                with col3:
-                    # Toggle button to show/hide task history
-                    if st.button("History", key=f"history_{unique_key}", use_container_width=True):
-                        if f'show_history_{unique_key}' not in st.session_state:
-                            st.session_state[f'show_history_{unique_key}'] = True
-                        else:
-                            st.session_state[f'show_history_{unique_key}'] = not st.session_state.get(f'show_history_{unique_key}', False)
-
-                # Show task history if toggled
-                if st.session_state.get(f'show_history_{unique_key}', False):
-                    st.markdown(f'<h5><span class="chart-icon"></span> Last 3 Runs for {task_name}</h5>', unsafe_allow_html=True)
-                    history_df = get_task_history(session, task_name)
+                with col_schedule:
+                    st.markdown(task_schedule)
+                
+                with col_owner:
+                    st.markdown(task_owner)
+                
+                with col_actions:
+                    btn_col1, btn_col2, btn_col3 = st.columns(3)
                     
-                    if not history_df.empty:
-                        for hist_idx, run in history_df.iterrows():
-                            state_color = "green" if run['STATE'] == 'SUCCEEDED' else ("orange" if run['STATE'] == 'SCHEDULED' else "red")
-                            error_info = ""
-                            if run['STATE'] == 'FAILED' and run['ERROR_MESSAGE']:
-                                error_info = f"<br><strong>Error:</strong> {run['ERROR_MESSAGE']}"
-                            
-                            st.markdown(f"""
-                                <div style="padding: 10px; margin: 5px 0; background-color: #f8f9fa; border-left: 3px solid {state_color};">
-                                    <strong>Status:</strong> <span style="color: {state_color};">{run['STATE']}</span><br>
-                                    <strong>Scheduled:</strong> {run['SCHEDULED_TIME']}<br>
-                                    <strong>Completed:</strong> {run['COMPLETED_TIME'] if run['COMPLETED_TIME'] else 'N/A'}<br>
-                                    <strong>Duration:</strong> {run['DURATION_SECONDS'] if run['DURATION_SECONDS'] else 'N/A'} seconds
-                                    {error_info}
-                                </div>
-                            """, unsafe_allow_html=True)
-                    else:
-                        st.info("No execution history found for this task in the last 7 days.")
-                
+                    with btn_col1:
+                        if task_state == 'started':
+                            if st.button("Suspend", key=f"suspend_{unique_key}", use_container_width=True):
+                                try:
+                                    suspend_task(session, full_task_name)
+                                    st.success(f"Task {task_name} suspended")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error: {str(e)}")
+                        else:
+                            if st.button("Resume", key=f"resume_{unique_key}", use_container_width=True):
+                                try:
+                                    resume_task(session, full_task_name)
+                                    st.success(f"Task {task_name} resumed")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error: {str(e)}")
+                    
+                    with btn_col2:
+                        if st.button("Execute", key=f"execute_{unique_key}", use_container_width=True):
+                            try:
+                                execute_task(session, full_task_name)
+                                st.success(f"Task {task_name} executed")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {str(e)}")
+                    
+                    with btn_col3:
+                        if st.button("History", key=f"history_{unique_key}", use_container_width=True):
+                            # Set session state to show this task's history
+                            st.session_state['current_task_history'] = task_name
+
                 st.markdown("---")
             
-            # Add informational section
-            st.markdown("#### Task Information")
-            st.info("""
-            **warehouse_monitor_task**: Captures warehouse configuration details every day at 7:00 AM EST.
+            # Show task history below the table
+            if 'current_task_history' in st.session_state and st.session_state['current_task_history']:
+                task_name = st.session_state['current_task_history']
+                st.html(f'<div class="task-history-container">')
+                st.html(f'<h5><span class="chart-icon"></span> Last 3 Runs for {task_name}</h5>')
+                history_df = get_task_history(session, task_name)
+                
+                if not history_df.empty:
+                    for hist_idx, run in history_df.iterrows():
+                        state_color = "green" if run['STATE'] == 'SUCCEEDED' else ("orange" if run['STATE'] == 'SCHEDULED' else "red")
+                        error_info = ""
+                        if run['STATE'] == 'FAILED' and run['ERROR_MESSAGE']:
+                            error_info = f"<br><strong>Error:</strong> {run['ERROR_MESSAGE']}"
+                        
+                        st.html(f"""
+                            <div style="padding: 10px; margin: 5px 0; background-color: #f8f9fa; border-left: 3px solid {state_color};">
+                                <strong>Status:</strong> <span style="color: {state_color};">{run['STATE']}</span><br>
+                                <strong>Scheduled:</strong> {run['SCHEDULED_TIME']}<br>
+                                <strong>Completed:</strong> {run['COMPLETED_TIME'] if run['COMPLETED_TIME'] else 'N/A'}<br>
+                                <strong>Duration:</strong> {run['DURATION_SECONDS'] if run['DURATION_SECONDS'] else 'N/A'} seconds
+                                {error_info}
+                            </div>
+                        """)
+                else:
+                    st.info("No execution history found for this task in the last 7 days.")
+                st.html('</div>')
             
-            **db_retention_monitor_task**: Captures database, schema, and table retention time information every day at 7:00 AM EST.
-            
-            **warehouse_params_monitor_task** (if created by consumer): Custom task for monitoring additional warehouse parameters.
-            
-            You can execute tasks immediately using the "Execute Now" button, suspend/resume them as needed, and view execution history with the "History" button.
-            """)
+            # Add collapsible informational section
+            with st.expander("Task Information", expanded=False):
+                st.html("""
+                    <div class="task-info-section">
+                        <p><strong>warehouse_monitor_task</strong>: Captures warehouse configuration details every day at 7:00 AM EST.</p>
+                        
+                        <p><strong>db_retention_monitor_task</strong>: Captures database, schema, and table retention time information every day at 7:00 AM EST.</p>
+                        
+                        <p><strong>tag_monitor_task</strong>: Captures tag assignments on warehouses, databases, and tables every day at 7:05 AM EST.</p>
+                        
+                        <p><strong>warehouse_params_monitor_task</strong> (if created by consumer): Custom task for monitoring additional warehouse parameters.</p>
+                        
+                        <p><strong>Execution Order</strong>: When using "Execute All Tasks", tasks run sequentially in dependency order:</p>
+                        <ol>
+                            <li>warehouse_monitor_task (base data collection)</li>
+                            <li>db_retention_monitor_task (depends on warehouse data)</li>
+                            <li>tag_monitor_task (depends on database data)</li>
+                            <li>warehouse_params_monitor_task (if exists, depends on warehouse data)</li>
+                        </ol>
+                        
+                        <p>You can execute tasks immediately using the "Execute" button, suspend/resume them as needed, and view execution history with the "History" button.</p>
+                    </div>
+                """)
         else:
             st.warning("No tasks found in the application")
     except Exception as e:
@@ -144,6 +182,7 @@ def render_task_management_tab(session):
         The application includes the following tasks:
         - **warehouse_monitor_task**: Monitors warehouse configurations
         - **db_retention_monitor_task**: Monitors database, schema, and table retention settings
+        - **tag_monitor_task**: Monitors tag assignments on objects
         
         Please ensure the tasks are properly set up in the application.
         """)

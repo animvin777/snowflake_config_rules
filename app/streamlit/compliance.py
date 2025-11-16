@@ -168,3 +168,99 @@ def check_compliance(operator, value, threshold):
     elif operator == 'NOT_EQUALS' and value == threshold:
         is_compliant = False
     return is_compliant
+
+
+def check_tag_compliance(all_objects_df, tag_assignments_df, applied_tag_rules_df):
+    """Check tag compliance for objects against applied tag rules
+    
+    Args:
+        all_objects_df: DataFrame of all objects of a specific type
+        tag_assignments_df: DataFrame of tag assignments from tag_compliance_details
+        applied_tag_rules_df: DataFrame of applied tag rules
+    
+    Returns:
+        List of dictionaries with compliance information for each object
+    """
+    compliance_data = []
+    
+    for _, obj in all_objects_df.iterrows():
+        object_name = obj['OBJECT_NAME']
+        object_database = obj.get('OBJECT_DATABASE')
+        object_schema = obj.get('OBJECT_SCHEMA')
+        
+        # Get full object name for display
+        if pd.notna(object_schema):
+            full_object_name = f"{object_database}.{object_schema}.{object_name}"
+        elif pd.notna(object_database):
+            full_object_name = object_database
+        else:
+            full_object_name = object_name
+        
+        # Get all tags assigned to this specific object by matching on object_name
+        # For warehouses: match by OBJECT_NAME directly
+        # For databases: match by OBJECT_NAME (which is the database name)
+        # For tables: match by OBJECT_NAME (which is the table name) and also check schema/database if needed
+        object_tags_df = tag_assignments_df[tag_assignments_df['OBJECT_NAME'] == object_name]
+        
+        # Extract just the tag names (not the full qualified name)
+        object_tags = []
+        for _, tag_row in object_tags_df.iterrows():
+            tag_full_name = tag_row['TAG_NAME']
+            # Extract just the tag name from fully qualified name (DATABASE.SCHEMA.TAG_NAME)
+            if pd.notna(tag_full_name):
+                # Get the last part after the last dot (the actual tag name)
+                tag_parts = str(tag_full_name).split('.')
+                tag_name_only = tag_parts[-1] if tag_parts else tag_full_name
+                object_tags.append(tag_name_only)
+        
+        obj_compliance = {
+            'object_name': full_object_name,
+            'object_database': object_database,
+            'object_schema': object_schema,
+            'object_type': obj.get('OBJECT_TYPE', applied_tag_rules_df.iloc[0]['OBJECT_TYPE'] if not applied_tag_rules_df.empty else 'UNKNOWN'),
+            'table_type': obj.get('TABLE_TYPE'),
+            'owner': obj.get('OWNER'),
+            'assigned_tags': object_tags,
+            'violations': []
+        }
+        
+        # Check each applied tag rule
+        for _, rule in applied_tag_rules_df.iterrows():
+            required_tag_full = rule['TAG_NAME']
+            
+            # Extract just the tag name from the fully qualified tag name
+            required_tag_parts = str(required_tag_full).split('.')
+            required_tag = required_tag_parts[-1] if required_tag_parts else required_tag_full
+            
+            # Check if the required tag is missing
+            if required_tag not in object_tags:
+                obj_compliance['violations'].append({
+                    'tag_name': required_tag_full,  # Keep full name for display
+                    'rule_description': f"Compulsory tag '{required_tag_full}' missing on {rule['OBJECT_TYPE']}"
+                })
+        
+        compliance_data.append(obj_compliance)
+    
+    return compliance_data
+
+
+def generate_tag_fix_sql(object_name, object_type, tag_name, tag_value='<applicable_value>'):
+    """Generate SQL to add a tag to an object
+    
+    Args:
+        object_name: Full name of the object
+        object_type: Type of object ('WAREHOUSE', 'DATABASE', 'TABLE')
+        tag_name: Name of the tag to add
+        tag_value: Value for the tag (default placeholder)
+    
+    Returns:
+        SQL statement to add the tag
+    """
+    if object_type == 'WAREHOUSE':
+        return f"ALTER WAREHOUSE {object_name}\nSET TAG {tag_name} = '{tag_value}';"
+    elif object_type == 'DATABASE':
+        return f"ALTER DATABASE {object_name}\nSET TAG {tag_name} = '{tag_value}';"
+    elif object_type == 'TABLE':
+        return f"ALTER TABLE {object_name}\nSET TAG {tag_name} = '{tag_value}';"
+    else:
+        return f"-- Unsupported object type: {object_type}"

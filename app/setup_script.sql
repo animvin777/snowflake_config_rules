@@ -82,6 +82,30 @@ CREATE TABLE IF NOT EXISTS data_schema.applied_rules (
 );
 
 
+-- Create table to store applied tag rules
+CREATE TABLE IF NOT EXISTS data_schema.applied_tag_rules (
+    applied_tag_rule_id NUMBER AUTOINCREMENT PRIMARY KEY,
+    tag_name VARCHAR(255) NOT NULL,
+    object_type VARCHAR(50) NOT NULL,  -- 'WAREHOUSE', 'DATABASE', 'TABLE'
+    applied_at TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+    applied_by VARCHAR(255),
+    is_active BOOLEAN DEFAULT TRUE,
+    UNIQUE (tag_name, object_type, is_active)
+);
+
+
+-- Create table to store tag compliance details
+CREATE TABLE IF NOT EXISTS data_schema.tag_compliance_details (
+    object_type VARCHAR(50) NOT NULL,  -- 'WAREHOUSE', 'DATABASE', 'TABLE'
+    object_database VARCHAR(255),
+    object_schema VARCHAR(255),
+    object_name VARCHAR(255) NOT NULL,
+    tag_name VARCHAR(255),
+    tag_value VARCHAR(16777216),
+    capture_timestamp TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP()
+);
+
+
 -- Insert predefined configuration rules for warehouses
 INSERT INTO data_schema.config_rules (rule_id, rule_name, rule_description, rule_type, check_parameter, comparison_operator, unit, default_threshold, allow_threshold_override, has_fix_button, has_fix_sql)
 SELECT 'MAX_STATEMENT_TIMEOUT', 'Max Statement Timeout in Seconds', 'Maximum allowed statement timeout for warehouses', 'Warehouse', 'STATEMENT_TIMEOUT_IN_SECONDS', 'MAX', 'seconds', 300, TRUE, TRUE, TRUE
@@ -249,6 +273,77 @@ ALTER TASK data_schema.db_retention_monitor_task RESUME;
 
 EXECUTE TASK data_schema.db_retention_monitor_task;
 
+
+-- Create managed task to monitor tag assignments on objects
+CREATE OR REPLACE TASK data_schema.tag_monitor_task
+    USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+    SCHEDULE = 'USING CRON 5 7 * * * America/New_York'
+AS
+BEGIN
+  -- Truncate the table before inserting new data
+  TRUNCATE TABLE data_schema.tag_compliance_details;
+  
+  -- Insert warehouse tag details
+  INSERT INTO data_schema.tag_compliance_details (
+    object_type, object_database, object_schema, object_name,
+    tag_name, tag_value, capture_timestamp
+  )
+  SELECT 
+    'WAREHOUSE' as object_type,
+    NULL as object_database,
+    NULL as object_schema,
+    object_name,
+    tag_name,
+    tag_value,
+    CURRENT_TIMESTAMP()
+  FROM SNOWFLAKE.ACCOUNT_USAGE.TAG_REFERENCES
+  WHERE object_deleted IS NULL
+    AND domain = 'WAREHOUSE';
+
+  -- Insert database tag details
+  INSERT INTO data_schema.tag_compliance_details (
+    object_type, object_database, object_schema, object_name,
+    tag_name, tag_value, capture_timestamp
+  )
+  SELECT 
+    'DATABASE' as object_type,
+    object_name as object_database,
+    NULL as object_schema,
+    object_name,
+    tag_name,
+    tag_value,
+    CURRENT_TIMESTAMP()
+  FROM SNOWFLAKE.ACCOUNT_USAGE.TAG_REFERENCES
+  WHERE object_deleted IS NULL
+    AND domain = 'DATABASE';
+  
+  -- Insert table tag details
+  INSERT INTO data_schema.tag_compliance_details (
+    object_type, object_database, object_schema, object_name,
+    tag_name, tag_value, capture_timestamp
+  )
+  SELECT 
+    'TABLE' as object_type,
+    object_database,
+    object_schema,
+    object_name,
+    tag_name,
+    tag_value,
+    CURRENT_TIMESTAMP()
+  FROM SNOWFLAKE.ACCOUNT_USAGE.TAG_REFERENCES
+  WHERE object_deleted IS NULL
+    AND domain = 'TABLE'
+    AND object_database in (
+      SELECT database_name FROM data_schema.database_retention_details
+      WHERE object_type = 'DATABASE'
+    );
+END;
+
+-- Resume the task
+ALTER TASK data_schema.tag_monitor_task RESUME;
+
+EXECUTE TASK data_schema.tag_monitor_task;
+
 -- Create internal stage for Streamlit files
 CREATE STAGE IF NOT EXISTS core.streamlit_stage
   DIRECTORY = (ENABLE = TRUE);
@@ -276,9 +371,12 @@ GRANT READ ON STAGE core.streamlit_stage TO APPLICATION ROLE config_rules_admin;
 GRANT WRITE ON STAGE core.streamlit_stage TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TASK data_schema.warehouse_monitor_task TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TASK data_schema.db_retention_monitor_task TO APPLICATION ROLE config_rules_admin;
+GRANT ALL ON TASK data_schema.tag_monitor_task TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON WAREHOUSE CONFIG_RULES_VW TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.warehouse_details TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.database_retention_details TO APPLICATION ROLE config_rules_admin;
+GRANT ALL ON TABLE data_schema.tag_compliance_details TO APPLICATION ROLE config_rules_admin;
 GRANT SELECT ON VIEW data_schema.warehouse_monitor_view TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.config_rules TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.applied_rules TO APPLICATION ROLE config_rules_admin;
+GRANT ALL ON TABLE data_schema.applied_tag_rules TO APPLICATION ROLE config_rules_admin;
