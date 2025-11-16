@@ -57,9 +57,11 @@ CREATE TABLE IF NOT EXISTS data_schema.config_rules (
     rule_name VARCHAR(255) NOT NULL,
     rule_description VARCHAR(500),
     rule_type VARCHAR(50) NOT NULL,  -- 'Warehouse', 'Database'
-    warehouse_parameter VARCHAR(100) NOT NULL,
-    comparison_operator VARCHAR(10) NOT NULL,  -- 'MAX', 'MIN', 'EQUALS'
+    check_parameter VARCHAR(100) NOT NULL,
+    comparison_operator VARCHAR(10) NOT NULL,  -- 'MAX', 'MIN', 'EQUALS', 'NOT_EQUALS'
     unit VARCHAR(50),  -- 'seconds', 'minutes', etc.
+    default_threshold NUMBER,  -- Default threshold value for the rule
+    allow_threshold_override BOOLEAN DEFAULT TRUE,  -- Whether threshold can be overwritten
     is_active BOOLEAN DEFAULT TRUE,
     has_fix_button BOOLEAN DEFAULT FALSE,
     has_fix_sql BOOLEAN DEFAULT FALSE,
@@ -80,21 +82,26 @@ CREATE TABLE IF NOT EXISTS data_schema.applied_rules (
 );
 
 
--- Insert predefined configuration rules
-INSERT INTO data_schema.config_rules (rule_id, rule_name, rule_description, rule_type, warehouse_parameter, comparison_operator, unit, has_fix_button, has_fix_sql)
-SELECT 'MAX_STATEMENT_TIMEOUT', 'Max Statement Timeout in Seconds', 'Maximum allowed statement timeout for warehouses', 'Warehouse', 'STATEMENT_TIMEOUT_IN_SECONDS', 'MAX', 'seconds', TRUE, TRUE
+-- Insert predefined configuration rules for warehouses
+INSERT INTO data_schema.config_rules (rule_id, rule_name, rule_description, rule_type, check_parameter, comparison_operator, unit, default_threshold, allow_threshold_override, has_fix_button, has_fix_sql)
+SELECT 'MAX_STATEMENT_TIMEOUT', 'Max Statement Timeout in Seconds', 'Maximum allowed statement timeout for warehouses', 'Warehouse', 'STATEMENT_TIMEOUT_IN_SECONDS', 'MAX', 'seconds', 300, TRUE, TRUE, TRUE
 WHERE NOT EXISTS (SELECT 1 FROM data_schema.config_rules WHERE rule_id = 'MAX_STATEMENT_TIMEOUT')
 UNION ALL
-SELECT 'MAX_AUTO_SUSPEND', 'Max Auto Suspend in Seconds', 'Maximum allowed auto suspend time for warehouses', 'Warehouse', 'AUTO_SUSPEND', 'MAX', 'seconds', TRUE, TRUE
+SELECT 'MAX_AUTO_SUSPEND', 'Max Auto Suspend in Seconds', 'Maximum allowed auto suspend time for warehouses', 'Warehouse', 'AUTO_SUSPEND', 'MAX', 'seconds', 30, TRUE, TRUE, TRUE
 WHERE NOT EXISTS (SELECT 1 FROM data_schema.config_rules WHERE rule_id = 'MAX_AUTO_SUSPEND')
 UNION ALL
-SELECT 'MAX_TABLE_RETENTION_TIME', 'Max Table Retention Time in Days', 'Maximum allowed data retention time for tables', 'Database', 'DATA_RETENTION_TIME_IN_DAYS', 'MAX', 'days', FALSE, TRUE
+SELECT 'ZERO_STATEMENT_TIMEOUT', '0 Statement Timeout in Seconds', 'Maximum allowed statement timeout for warehouses', 'Warehouse', 'STATEMENT_TIMEOUT_IN_SECONDS', 'NOT_EQUALS', 'seconds', 0, FALSE, TRUE, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM data_schema.config_rules WHERE rule_id = 'ZERO_STATEMENT_TIMEOUT');
+
+-- Insert predefined configuration rules for database objects
+INSERT INTO data_schema.config_rules (rule_id, rule_name, rule_description, rule_type, check_parameter, comparison_operator, unit, default_threshold, allow_threshold_override, has_fix_button, has_fix_sql)
+SELECT 'MAX_TABLE_RETENTION_TIME', 'Max Table Retention Time in Days', 'Maximum allowed data retention time for tables', 'Database', 'DATA_RETENTION_TIME_IN_DAYS', 'MAX', 'days', 1, TRUE, FALSE, TRUE
 WHERE NOT EXISTS (SELECT 1 FROM data_schema.config_rules WHERE rule_id = 'MAX_TABLE_RETENTION_TIME')
 UNION ALL
-SELECT 'MAX_SCHEMA_RETENTION_TIME', 'Max Schema Retention Time in Days', 'Maximum allowed data retention time for schemas', 'Database', 'DATA_RETENTION_TIME_IN_DAYS', 'MAX', 'days', FALSE, TRUE
+SELECT 'MAX_SCHEMA_RETENTION_TIME', 'Max Schema Retention Time in Days', 'Maximum allowed data retention time for schemas', 'Database', 'DATA_RETENTION_TIME_IN_DAYS', 'MAX', 'days', 1, TRUE, FALSE, TRUE
 WHERE NOT EXISTS (SELECT 1 FROM data_schema.config_rules WHERE rule_id = 'MAX_SCHEMA_RETENTION_TIME')
 UNION ALL
-SELECT 'MAX_DATABASE_RETENTION_TIME', 'Max Database Retention Time in Days', 'Maximum allowed data retention time for databases', 'Database', 'DATA_RETENTION_TIME_IN_DAYS', 'MAX', 'days', FALSE, TRUE
+SELECT 'MAX_DATABASE_RETENTION_TIME', 'Max Database Retention Time in Days', 'Maximum allowed data retention time for databases', 'Database', 'DATA_RETENTION_TIME_IN_DAYS', 'MAX', 'days', 1, TRUE, FALSE, TRUE
 WHERE NOT EXISTS (SELECT 1 FROM data_schema.config_rules WHERE rule_id = 'MAX_DATABASE_RETENTION_TIME');
 
 

@@ -13,8 +13,9 @@ def execute_sql(session, sql):
 def get_config_rules(session):
     """Retrieve all configuration rules"""
     query = """
-    SELECT rule_id, rule_name, rule_description, rule_type, warehouse_parameter, 
-           comparison_operator, unit, is_active, has_fix_button, has_fix_sql
+    SELECT rule_id, rule_name, rule_description, rule_type, check_parameter, 
+           comparison_operator, unit, default_threshold, allow_threshold_override,
+           is_active, has_fix_button, has_fix_sql
     FROM data_schema.config_rules
     WHERE is_active = TRUE
     ORDER BY rule_type, rule_name
@@ -26,7 +27,7 @@ def get_applied_rules(session):
     """Retrieve all applied rules with their threshold values"""
     query = """
     SELECT ar.applied_rule_id, ar.rule_id, cr.rule_name, ar.threshold_value,
-           cr.rule_type, cr.warehouse_parameter, cr.comparison_operator, cr.unit,
+           cr.rule_type, cr.check_parameter, cr.comparison_operator, cr.unit,
            ar.applied_at, ar.is_active, cr.has_fix_button, cr.has_fix_sql
     FROM data_schema.applied_rules ar
     JOIN data_schema.config_rules cr ON ar.rule_id = cr.rule_id
@@ -34,6 +35,23 @@ def get_applied_rules(session):
     ORDER BY ar.applied_at DESC
     """
     return session.sql(query).to_pandas()
+
+def get_wh_statement_timeout_default(session):
+    """Retrieve the default statement timeout value for warehouses to fix 0 value set"""
+    query = """
+    SELECT threshold_value
+    FROM data_schema.applied_rules ar
+    where ar.rule_id = 'MAX_STATEMENT_TIMEOUT' AND ar.is_active = TRUE
+    union
+    SELECT cr.default_threshold as threshold_value
+    FROM data_schema.config_rules cr
+    where cr.rule_id = 'MAX_STATEMENT_TIMEOUT'
+    LIMIT 1
+    """
+    result = session.sql(query).to_pandas()
+    if not result.empty:
+        return result.iloc[0]['THRESHOLD_VALUE']
+    return 3600*4  # Default to 4 hours if not set
 
 
 def get_warehouse_details(session):

@@ -1,5 +1,115 @@
 /* Snowflake Config Rules - Light & Dark Mode Compatible Styles */
 
+/* Icon Classes - SVG icons as CSS backgrounds */
+.db-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239C27B0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cellipse cx='12' cy='5' rx='9' ry='3'/%3E%3Cpath d='M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5'/%3E%3Cpath d='M3 12c0 1.66 4 3 9 3s9-1.34 9-3'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+.wh-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232196F3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+.settings-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+.schedule-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpolyline points='12 6 12 12 16 14'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+.chart-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 3v18h18'/%3E%3Cpath d='M18 17V9'/%3E%3Cpath d='M13 17V5'/%3E%3Cpath d='M8 17v-3'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+.check-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234CAF50' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+.cross-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23F44336' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+.refresh-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21.5 2v6h-6M2.5 22v-6h6'/%3E%3Cpath d='M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    vertical-align: middle;
+}
+
+.warning-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FF9800' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/%3E%3Cline x1='12' y1='9' x2='12' y2='13'/%3E%3Cline x1='12' y1='17' x2='12.01' y2='17'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+.folder-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFC107' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
 /* Refresh Icon Button */
 .refresh-button {
     position: absolute;
@@ -24,6 +134,11 @@
     font-weight: 500;
 }
 
+/* Make icons white in the header */
+.main-header .settings-icon {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFFFFF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E");
+}
+
 .main-header p {
     color: rgba(255,255,255,0.95);
     margin: 0.2rem 0 0 0;
@@ -32,6 +147,10 @@
 }
 
 /* Metric Card Styles - Adaptive for light/dark mode */
+.metric-cards-container [data-testid="column"] {
+    position: relative;
+}
+
 .metric-card {
     background: var(--background-color, #FAFAFA);
     padding: 0.8rem;
@@ -40,6 +159,12 @@
     margin-bottom: 0.6rem;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     transition: all 0.2s ease;
+    position: relative;
+    z-index: 1;
+}
+
+.metric-card.clickable {
+    cursor: pointer;
 }
 
 .metric-card:hover {
@@ -52,6 +177,24 @@
     margin: 0;
     font-size: 1.6rem;
     font-weight: 500;
+}
+
+/* Hide and position the invisible overlay buttons */
+.metric-cards-container button[data-testid="baseButton-secondary"] {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: calc(100% - 0.6rem) !important;
+    opacity: 0 !important;
+    z-index: 2 !important;
+    cursor: pointer !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
 }
 
 .metric-card p {
@@ -126,6 +269,20 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 
+/* Warehouse Rule Card - Blue/Compute Theme */
+.rule-card.warehouse {
+    border-left: 4px solid #2196F3;
+    background: var(--background-color, #FAFAFA);
+    box-shadow: 0 1px 3px rgba(33, 150, 243, 0.15);
+}
+
+/* Database Rule Card - Purple/Storage Theme */
+.rule-card.database {
+    border-left: 4px solid #9C27B0;
+    background: var(--background-color, #FAFAFA);
+    box-shadow: 0 1px 3px rgba(156, 39, 176, 0.15);
+}
+
 .rule-card h4 {
     margin: 0 0 0.4rem 0;
     color: var(--text-color, #212121);
@@ -137,6 +294,30 @@
     margin: 0.2rem 0;
     color: var(--secondary-text-color, #616161);
     font-size: 0.85rem;
+}
+
+/* Rule Type Labels */
+.rule-type-label {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-left: 8px;
+}
+
+.rule-type-label.warehouse {
+    background: rgba(33, 150, 243, 0.12);
+    color: #1565C0;
+    border: 1px solid rgba(33, 150, 243, 0.25);
+}
+
+.rule-type-label.database {
+    background: rgba(156, 39, 176, 0.12);
+    color: #6A1B9A;
+    border: 1px solid rgba(156, 39, 176, 0.25);
 }
 
 /* Warehouse Detail Box Styles - Adaptive */
@@ -305,6 +486,310 @@
     --code-background: rgba(255, 152, 0, 0.15);
     --hover-background: rgba(33, 150, 243, 0.08);
     --tab-text-color: #616161;
+}
+
+/* ========================================
+   BUTTON STYLING
+   ======================================== */
+
+/* Base button styling - applies to all buttons */
+.stButton > button {
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    position: relative;
+    padding-left: 2rem;
+}
+
+.stButton > button:hover {
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    transform: translateY(-1px);
+}
+
+.stButton > button:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* Primary buttons - green for success actions */
+.stButton > button[kind="primary"],
+.stButton > button[data-testid="baseButton-primary"] {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+}
+
+.stButton > button[kind="primary"]:hover,
+.stButton > button[data-testid="baseButton-primary"]:hover {
+    background-color: #45a049;
+}
+
+/* Secondary buttons - default styling */
+.stButton > button[kind="secondary"],
+.stButton > button[data-testid="baseButton-secondary"] {
+    background-color: var(--background-color, #f0f2f6);
+    color: var(--text-color, #262730);
+    border: 1px solid var(--border-color, #d0d0d0);
+}
+
+.stButton > button[kind="secondary"]:hover,
+.stButton > button[data-testid="baseButton-secondary"]:hover {
+    background-color: var(--hover-background, #e8eaed);
+    border-color: #2196F3;
+}
+
+/* ========================================
+   BUTTON COLOR VARIATIONS
+   ======================================== */
+
+/* Green - Success/Compliant */
+.stButton > button[key="filter_compliant_btn"],
+.stButton > button[key="filter_compliant_objects_btn"] {
+    background-color: #4CAF50 !important;
+    color: white !important;
+}
+
+.stButton > button[key="filter_compliant_btn"]:hover,
+.stButton > button[key="filter_compliant_objects_btn"]:hover {
+    background-color: #45a049 !important;
+}
+
+/* Green - Fix/Yes buttons */
+.stButton > button[key*="fix"],
+.stButton > button[key*="yes"] {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.stButton > button[key*="fix"]:hover,
+.stButton > button[key*="yes"]:hover {
+    background-color: #45a049;
+}
+
+/* Red - Error/Non-Compliant */
+.stButton > button[key="filter_non_compliant_btn"],
+.stButton > button[key="filter_non_compliant_objects_btn"] {
+    background-color: #F44336 !important;
+    color: white !important;
+}
+
+.stButton > button[key="filter_non_compliant_btn"]:hover,
+.stButton > button[key="filter_non_compliant_objects_btn"]:hover {
+    background-color: #D32F2F !important;
+}
+
+/* Orange - Warning/Deactivate */
+.stButton > button[key*="deact"] {
+    background-color: #FF9800;
+    color: white;
+    border: none;
+}
+
+.stButton > button[key*="deact"]:hover {
+    background-color: #F57C00;
+}
+
+/* Blue - Info/SQL */
+.stButton > button[key*="sql"]:not([key*="hide"]) {
+    background-color: #2196F3;
+    color: white;
+}
+
+.stButton > button[key*="sql"]:not([key*="hide"]):hover {
+    background-color: #1976D2;
+}
+
+/* Gray - Neutral/Cancel/Hide */
+.stButton > button[key*="no"],
+.stButton > button[key*="hide"],
+.stButton > button[key*="suspend"] {
+    background-color: #9E9E9E;
+    color: white;
+}
+
+.stButton > button[key*="no"]:hover,
+.stButton > button[key*="hide"]:hover,
+.stButton > button[key*="suspend"]:hover {
+    background-color: #757575;
+}
+
+/* Purple - History */
+.stButton > button[key*="history"] {
+    background-color: #9C27B0;
+    color: white;
+}
+
+.stButton > button[key*="history"]:hover {
+    background-color: #7B1FA2;
+}
+
+/* Green - Resume/Execute */
+.stButton > button[key*="resume"],
+.stButton > button[key*="execute"] {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.stButton > button[key*="resume"]:hover,
+.stButton > button[key*="execute"]:hover {
+    background-color: #45a049;
+}
+
+/* ========================================
+   BUTTON ICONS (SVG via ::before)
+   ======================================== */
+
+/* Fix button icon */
+.stButton > button[key*="fix"]::before {
+    content: "";
+    position: absolute;
+    left: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+/* SQL button icon */
+.stButton > button[key*="sql"]:not([key*="hide"])::before {
+    content: "";
+    position: absolute;
+    left: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+/* Refresh button - special circular style with SVG icon */
+/* Target buttons containing the ⟳ character */
+.stButton > button:has(div:contains("⟳")),
+.stButton > button[key*="refresh"] {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background-color: var(--background-color, #f0f2f6) !important;
+    border: 1px solid var(--border-color, #d0d0d0) !important;
+    transition: all 0.3s ease !important;
+}
+
+/* Hide the text content and show SVG icon */
+.stButton > button:has(div:contains("⟳")) div,
+.stButton > button[key*="refresh"] div {
+    display: none !important;
+}
+
+.stButton > button:has(div:contains("⟳"))::before,
+.stButton > button[key*="refresh"]::before {
+    content: "" !important;
+    width: 32px !important;
+    height: 32px !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21.5 2v6h-6M2.5 22v-6h6'/%3E%3Cpath d='M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2'/%3E%3C/svg%3E") !important;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    position: static !important;
+    transform: none !important;
+}
+
+.stButton > button:has(div:contains("⟳")):hover,
+.stButton > button[key*="refresh"]:hover {
+    background-color: #2196F3 !important;
+    color: white !important;
+    border-color: #2196F3 !important;
+    transform: rotate(180deg) !important;
+}
+
+.stButton > button:has(div:contains("⟳")):hover::before,
+.stButton > button[key*="refresh"]:hover::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21.5 2v6h-6M2.5 22v-6h6'/%3E%3Cpath d='M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2'/%3E%3C/svg%3E") !important;
+}
+
+/* Execute/Play button icon */
+.stButton > button[key*="execute"]::before,
+.stButton > button[key*="resume"]::before {
+    content: "";
+    position: absolute;
+    left: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='5 3 19 12 5 21 5 3'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+/* Suspend/Pause button icon */
+.stButton > button[key*="suspend"]::before {
+    content: "";
+    position: absolute;
+    left: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='4' width='4' height='16'/%3E%3Crect x='14' y='4' width='4' height='16'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+/* History button icon */
+.stButton > button[key*="history"]::before {
+    content: "";
+    position: absolute;
+    left: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpolyline points='12 6 12 12 16 14'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+/* Deactivate button icon */
+.stButton > button[key*="deact"]::before {
+    content: "";
+    position: absolute;
+    left: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='4.93' y1='4.93' x2='19.07' y2='19.07'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+/* ========================================
+   BUTTON SPACING ADJUSTMENTS
+   ======================================== */
+
+/* Remove left padding for buttons without icons */
+.stButton > button[key*="yes"],
+.stButton > button[key*="no"],
+.stButton > button[key*="hide"],
+.stButton > button[key*="filter"],
+.stButton > button:not([key]) {
+    padding-left: 0.75rem;
+}
+
+/* Make buttons more prominent for action buttons */
+.stButton > button[type="primary"] {
+    font-weight: 600;
 }
 
 /* Responsive Design */

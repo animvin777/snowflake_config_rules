@@ -6,7 +6,7 @@ Handles warehouse compliance validation against applied rules
 import pandas as pd
 
 
-def check_compliance(warehouse_df, applied_rules_df):
+def check_wh_compliance(warehouse_df, applied_rules_df):
     """Check warehouse compliance against applied rules"""
     compliance_data = []
     
@@ -20,7 +20,7 @@ def check_compliance(warehouse_df, applied_rules_df):
         }
         
         for _, rule in applied_rules_df.iterrows():
-            param = rule['WAREHOUSE_PARAMETER']
+            param = rule['CHECK_PARAMETER']
             threshold = rule['THRESHOLD_VALUE']
             operator = rule['COMPARISON_OPERATOR']
             rule_name = rule['RULE_NAME']
@@ -38,13 +38,7 @@ def check_compliance(warehouse_df, applied_rules_df):
                 wh_value = None
             
             # Check compliance based on operator
-            is_compliant = True
-            if operator == 'MAX' and wh_value is not None and wh_value > threshold:
-                is_compliant = False
-            elif operator == 'MIN' and wh_value is not None and wh_value < threshold:
-                is_compliant = False
-            elif operator == 'EQUALS' and wh_value != threshold:
-                is_compliant = False
+            is_compliant = check_compliance(operator, wh_value, threshold)
             
             if not is_compliant:
                 wh_compliance['violations'].append({
@@ -64,7 +58,7 @@ def check_compliance(warehouse_df, applied_rules_df):
     return compliance_data
 
 
-def generate_fix_sql(warehouse_name, parameter, threshold_value):
+def generate_wh_fix_sql(warehouse_name, parameter, threshold_value):
     """Generate SQL to fix a non-compliant warehouse"""
     if parameter == 'AUTO_SUSPEND':
         return f"ALTER WAREHOUSE {warehouse_name}\nSET AUTO_SUSPEND = {int(threshold_value)};"
@@ -73,7 +67,7 @@ def generate_fix_sql(warehouse_name, parameter, threshold_value):
     else:
         return f"-- No SQL available for parameter: {parameter}"
 
-def generate_post_fix_update_sql(warehouse_name, parameter, threshold_value):
+def generate_wh_post_fix_update_sql(warehouse_name, parameter, threshold_value):
     """Generate SQL to update warehouse_details after fix"""
     if parameter == 'AUTO_SUSPEND':
         return f"UPDATE data_schema.warehouse_details \nSET AUTO_SUSPEND = {int(threshold_value)} \nWHERE name = '{warehouse_name}';"
@@ -114,7 +108,7 @@ def check_table_compliance(table_df, applied_rules_df):
             elif object_type == 'TABLE' and rule_id != 'MAX_TABLE_RETENTION_TIME':
                 continue
             
-            param = rule['WAREHOUSE_PARAMETER']
+            param = rule['CHECK_PARAMETER']
             threshold = rule['THRESHOLD_VALUE']
             operator = rule['COMPARISON_OPERATOR']
             rule_name = rule['RULE_NAME']
@@ -130,13 +124,7 @@ def check_table_compliance(table_df, applied_rules_df):
                 obj_value = None
             
             # Check compliance based on operator
-            is_compliant = True
-            if operator == 'MAX' and obj_value is not None and obj_value > threshold:
-                is_compliant = False
-            elif operator == 'MIN' and obj_value is not None and obj_value < threshold:
-                is_compliant = False
-            elif operator == 'EQUALS' and obj_value != threshold:
-                is_compliant = False
+            is_compliant = check_compliance(operator, obj_value, threshold)
             
             if not is_compliant:
                 obj_compliance['violations'].append({
@@ -168,3 +156,15 @@ def generate_table_fix_sql(database_name, schema_name, table_name, parameter, th
             return f"ALTER TABLE {full_table_name}\nSET DATA_RETENTION_TIME_IN_DAYS = {int(threshold_value)};"
     else:
         return f"-- No SQL available for parameter: {parameter}"
+
+def check_compliance(operator, value, threshold):
+    is_compliant = True
+    if operator == 'MAX' and value is not None and value > threshold:
+        is_compliant = False
+    elif operator == 'MIN' and value is not None and value < threshold:
+        is_compliant = False
+    elif operator == 'EQUALS' and value != threshold:
+        is_compliant = False
+    elif operator == 'NOT_EQUALS' and value == threshold:
+        is_compliant = False
+    return is_compliant

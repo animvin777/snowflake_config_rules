@@ -5,9 +5,9 @@ Displays warehouse compliance status against applied rules
 
 import streamlit as st
 import pandas as pd
-from database import get_applied_rules, get_warehouse_details, execute_sql
-from compliance import check_compliance, generate_fix_sql, generate_post_fix_update_sql
-from ui_utils import render_refresh_button
+from database import get_applied_rules, get_warehouse_details, execute_sql, get_wh_statement_timeout_default
+from compliance import check_wh_compliance, generate_wh_fix_sql, generate_wh_post_fix_update_sql
+from ui_utils import render_refresh_button, render_section_header, render_filter_button, filter_by_search
 
 
 def render_wh_compliance_view_tab(session):
@@ -16,14 +16,16 @@ def render_wh_compliance_view_tab(session):
     if 'fixed_warehouses' not in st.session_state:
         st.session_state.fixed_warehouses = {}
     
+    # Initialize filter state
+    if 'wh_compliance_filter' not in st.session_state:
+        st.session_state.wh_compliance_filter = "All Warehouses"
+    
     # Refresh button in top right
     col_title, col_refresh = render_refresh_button("tab2")
     with col_title:
-        st.markdown("### 🏭 Warehouse Configuration Health")
+        render_section_header("Warehouse Compliance", "wh-icon")
     with col_refresh:
-        if st.button("🔄", key="refresh_tab2", help="Refresh data"):
-            # Clear fixed warehouses on refresh
-            st.session_state.fixed_warehouses = {}
+        if st.button("⟳", key="refresh_tab2", help="Refresh data"):
             st.rerun()
     st.markdown("---")
     
@@ -37,7 +39,7 @@ def render_wh_compliance_view_tab(session):
         if warehouse_df.empty:
             st.warning("No warehouse data available. The monitoring task may not have run yet.")
         else:
-            compliance_data = check_compliance(warehouse_df, applied_rules_df)
+            compliance_data = check_wh_compliance(warehouse_df, applied_rules_df)
             
             # Summary metrics
             total_warehouses = len(compliance_data)
@@ -45,122 +47,58 @@ def render_wh_compliance_view_tab(session):
             compliant_warehouses = total_warehouses - non_compliant_warehouses
             compliance_rate = (compliant_warehouses / total_warehouses * 100) if total_warehouses > 0 else 0
             
-            # Metrics in styled cards
+            # Metrics as clickable styled buttons
             col1, col2, col3, col4 = st.columns(4)
+            
             with col1:
-                st.markdown(f"""
-                    <div class="metric-card">
-                        <h3>{total_warehouses}</h3>
-                        <p>Total Warehouses</p>
-                    </div>
-                """, unsafe_allow_html=True)
+                render_filter_button("Total Warehouses", total_warehouses, "filter_all_btn", "All Warehouses", "wh_compliance_filter")
+            
             with col2:
-                st.markdown(f"""
-                    <div class="metric-card success">
-                        <h3>{compliant_warehouses}</h3>
-                        <p>Compliant</p>
-                    </div>
-                """, unsafe_allow_html=True)
+                render_filter_button("Compliant", compliant_warehouses, "filter_compliant_btn", "Compliant Only", "wh_compliance_filter")
+            
             with col3:
-                st.markdown(f"""
-                    <div class="metric-card error">
-                        <h3>{non_compliant_warehouses}</h3>
-                        <p>Non-Compliant</p>
-                    </div>
-                """, unsafe_allow_html=True)
+                render_filter_button("Non-Compliant", non_compliant_warehouses, "filter_non_compliant_btn", "Non-Compliant Only", "wh_compliance_filter")
+            
             with col4:
-                st.markdown(f"""
-                    <div class="metric-card warning">
-                        <h3>{compliance_rate:.1f}%</h3>
-                        <p>Compliance Rate</p>
-                    </div>
-                """, unsafe_allow_html=True)
+                render_filter_button("Compliance Rate", f"{compliance_rate:.1f}%", "filter_rate_btn", "Non-Compliant First", "wh_compliance_filter")
             
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # Filter and view options
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                view_filter = st.radio(
-                    "Filter",
-                    ["All Warehouses", "Non-Compliant Only", "Compliant Only"],
-                    horizontal=True,
-                    key="compliance_filter"
-                )
-            with col2:
-                # Add view toggle (Tile or List)
-                view_mode = st.radio(
-                    "View Mode",
-                    ["🔲 Tile View", "📋 List View"],
-                    horizontal=True,
-                    key="view_mode",
-                    index=0  # Default to Tile View
-                )
+            # Search box
+            search_term = st.text_input("Search warehouses or rules", placeholder="Type warehouse name or rule name...", key="wh_search")
             
             st.markdown("---")
             
-            # Display warehouse compliance based on view mode
-            if view_mode == "📋 List View":
-                _render_list_view(compliance_data, view_filter)
-            else:
-                _render_tile_view(session, compliance_data, view_filter)
+            # Display warehouse compliance in tile view
+            _render_tile_view(session, compliance_data, st.session_state.wh_compliance_filter, search_term)
 
 
-def _render_list_view(compliance_data, view_filter):
-    """Render list view of warehouse compliance"""
-    list_data = []
-    for wh_comp in compliance_data:
-        has_violations = len(wh_comp['violations']) > 0
-        
-        # Apply filter
-        if view_filter == "Non-Compliant Only" and not has_violations:
-            continue
-        elif view_filter == "Compliant Only" and has_violations:
-            continue
-        
-        status = "Non-Compliant" if has_violations else "Compliant"
-        violations_text = ", ".join([v['rule_name'] for v in wh_comp['violations']]) if has_violations else "-"
-        
-        list_data.append({
-            'Status': status,
-            'Warehouse': wh_comp['warehouse_name'],
-            'Type': wh_comp['warehouse_type'],
-            'Size': wh_comp['warehouse_size'],
-            'Owner': wh_comp['warehouse_owner'],
-            'Violations': violations_text
-        })
-    
-    if list_data:
-        df_display = pd.DataFrame(list_data)
-        st.dataframe(
-            df_display,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Status": st.column_config.TextColumn("Status", width="small"),
-                "Warehouse": st.column_config.TextColumn("Warehouse", width="medium"),
-                "Type": st.column_config.TextColumn("Type", width="small"),
-                "Size": st.column_config.TextColumn("Size", width="small"),
-                "Owner": st.column_config.TextColumn("Owner", width="medium"),
-                "Violations": st.column_config.TextColumn("Violations", width="large"),
-            }
-        )
-    else:
-        st.info("No warehouses match the selected filter.")
 
 
-def _render_tile_view(session, compliance_data, view_filter):
+def _render_tile_view(session, compliance_data, view_filter, search_term=""):
     """Render tile view of warehouse compliance"""
+    # Sort data if "Non-Compliant First" is selected
+    if view_filter == "Non-Compliant First":
+        compliance_data = sorted(compliance_data, key=lambda x: (len(x['violations']) == 0, x['warehouse_name']))
+    
     for wh_comp in compliance_data:
         has_violations = len(wh_comp['violations']) > 0
+        warehouse_name = wh_comp['warehouse_name']
         
-        # Apply filter
+        # Apply search filter
+        if search_term:
+            search_lower = search_term.lower()
+            # Search in warehouse name and rule names
+            rule_names = [v['rule_name'].lower() for v in wh_comp['violations']]
+            if (search_lower not in warehouse_name.lower() and 
+                not any(search_lower in rule for rule in rule_names)):
+                continue
+        
+        # Apply status filter (skip for "Non-Compliant First" which shows all)
         if view_filter == "Non-Compliant Only" and not has_violations:
             continue
         elif view_filter == "Compliant Only" and has_violations:
             continue
-        
-        warehouse_name = wh_comp['warehouse_name']
         
         # Check if this warehouse was recently fixed
         if warehouse_name in st.session_state.fixed_warehouses:
@@ -232,16 +170,16 @@ def _render_tile_view(session, compliance_data, view_filter):
                                     # Step 1: Run the fix SQL
                                     for violation in wh_comp['violations']:
                                         if violation.get('has_fix_button', False):
-                                            sql = generate_fix_sql(
+                                            sql = generate_wh_fix_sql(
                                                 warehouse_name,
                                                 violation['parameter'],
-                                                violation['threshold_value']
+                                                violation['threshold_value'] if violation['rule_id'] != 'ZERO_STATEMENT_TIMEOUT' else st.session_state.wh_default_timeout
                                             )
                                             execute_sql(session, sql)
-                                            update_sql = generate_post_fix_update_sql(
+                                            update_sql = generate_wh_post_fix_update_sql(
                                                 warehouse_name,
                                                 violation['parameter'],
-                                                violation['threshold_value']
+                                                violation['threshold_value'] if violation['rule_id'] != 'ZERO_STATEMENT_TIMEOUT' else st.session_state.wh_default_timeout
                                             )
                                             execute_sql(session, update_sql)
                                     
@@ -269,7 +207,7 @@ def _render_tile_view(session, compliance_data, view_filter):
                             sql_statements = []
                             for violation in wh_comp['violations']:
                                 if violation.get('has_fix_sql', False):
-                                    sql = generate_fix_sql(
+                                    sql = generate_wh_fix_sql(
                                         warehouse_name,
                                         violation['parameter'],
                                         violation['threshold_value']

@@ -212,7 +212,7 @@ Result: Reduced Time Travel storage by ~85%
 
 ---
 
-### 📊 Data Explorer Tab
+### 📊 App Data Inspector Tab
 
 **Purpose:** Inspect all application data
 
@@ -408,7 +408,7 @@ Track these metrics to measure app effectiveness:
 
 ### Within the App
 1. **Task Issues**: Go to **⏱️ Scheduled Tasks** → View History → Check error messages
-2. **Missing Data**: Go to **📊 Data Explorer** → Verify data collection
+2. **Missing Data**: Go to **📊 App Data Inspector** → Verify data collection
 3. **SQL Preview**: Use "Show SQL" feature before fixing to review changes
 
 ### External Resources

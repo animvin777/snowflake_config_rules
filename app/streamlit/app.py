@@ -33,11 +33,11 @@ render_header()
 
 # Create tabs with user-friendly names
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "⚙️ Configure Rules", 
-    "🏭 Warehouse Compliance", 
-    "🗄️ Database Compliance",
-    "⏱️ Schedule & Tasks",
-    "📊 Data Inspector"
+    "Configure Rules", 
+    "Warehouse Compliance", 
+    "Database Compliance",
+    "Schedule & Tasks",
+    "App Data Inspector"
 ])
 
 # Render each tab

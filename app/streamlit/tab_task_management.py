@@ -5,7 +5,7 @@ Handles the display and control of all tasks in the application
 
 import streamlit as st
 from database import get_all_tasks, get_task_history, suspend_task, resume_task, execute_task
-from ui_utils import render_refresh_button
+from ui_utils import render_refresh_button, render_section_header
 import pandas as pd
 
 
@@ -14,9 +14,9 @@ def render_task_management_tab(session):
     # Refresh button in top right
     col_title, col_refresh = render_refresh_button("tab_tasks")
     with col_title:
-        st.markdown("### ⏱️ Scheduled Tasks & Monitoring")
+        render_section_header("Schedule & Task Management", "schedule-icon")
     with col_refresh:
-        if st.button("🔄", key="refresh_tab_tasks", help="Refresh data"):
+        if st.button("⟳", key="refresh_tab_tasks", help="Refresh data"):
             st.rerun()
     st.markdown("---")
     
@@ -50,7 +50,7 @@ def render_task_management_tab(session):
                 
                 st.markdown(f"""
                     <div class="rule-card">
-                        <h4 style="margin-top:0;">📋 {task_name}</h4>
+                        <h4 style="margin-top:0;">{task_name}</h4>
                         <p style="margin-bottom:0.5rem;">
                             <strong>State:</strong> <span style="color: {'green' if task_state == 'started' else 'red'};">{task_state.upper()}</span> | 
                             <strong>Schedule:</strong> {task_schedule}
@@ -63,7 +63,7 @@ def render_task_management_tab(session):
                 
                 with col1:
                     if task_state == 'started':
-                        if st.button("⏸️ Suspend", key=f"suspend_{unique_key}", use_container_width=True):
+                        if st.button("Suspend", key=f"suspend_{unique_key}", use_container_width=True):
                             try:
                                 suspend_task(session, full_task_name)
                                 st.success(f"Task {task_name} suspended")
@@ -71,7 +71,7 @@ def render_task_management_tab(session):
                             except Exception as e:
                                 st.error(f"Error: {str(e)}")
                     else:
-                        if st.button("▶️ Resume", key=f"resume_{unique_key}", use_container_width=True):
+                        if st.button("Resume", key=f"resume_{unique_key}", use_container_width=True):
                             try:
                                 resume_task(session, full_task_name)
                                 st.success(f"Task {task_name} resumed")
@@ -80,7 +80,7 @@ def render_task_management_tab(session):
                                 st.error(f"Error: {str(e)}")
                 
                 with col2:
-                    if st.button("▶️ Execute Now", key=f"execute_{unique_key}", use_container_width=True):
+                    if st.button("Execute Now", key=f"execute_{unique_key}", use_container_width=True):
                         try:
                             execute_task(session, full_task_name)
                             st.success(f"Task {task_name} executed")
@@ -90,7 +90,7 @@ def render_task_management_tab(session):
                 
                 with col3:
                     # Toggle button to show/hide task history
-                    if st.button("📊 History", key=f"history_{unique_key}", use_container_width=True):
+                    if st.button("History", key=f"history_{unique_key}", use_container_width=True):
                         if f'show_history_{unique_key}' not in st.session_state:
                             st.session_state[f'show_history_{unique_key}'] = True
                         else:
@@ -98,7 +98,7 @@ def render_task_management_tab(session):
 
                 # Show task history if toggled
                 if st.session_state.get(f'show_history_{unique_key}', False):
-                    st.markdown(f"##### 📊 Last 3 Runs for {task_name}")
+                    st.markdown(f'<h5><span class="chart-icon"></span> Last 3 Runs for {task_name}</h5>', unsafe_allow_html=True)
                     history_df = get_task_history(session, task_name)
                     
                     if not history_df.empty:
@@ -123,7 +123,7 @@ def render_task_management_tab(session):
                 st.markdown("---")
             
             # Add informational section
-            st.markdown("#### ℹ️ Task Information")
+            st.markdown("#### Task Information")
             st.info("""
             **warehouse_monitor_task**: Captures warehouse configuration details every day at 7:00 AM EST.
             

@@ -6,17 +6,21 @@ Handles the display of database, schema, and table compliance status and remedia
 import streamlit as st
 from database import get_database_retention_details, get_applied_rules, execute_sql
 from compliance import check_table_compliance, generate_table_fix_sql
-from ui_utils import render_refresh_button
+from ui_utils import render_refresh_button, render_section_header, render_filter_button
 
 
 def render_database_compliance_tab(session):
     """Render the Database Compliance tab"""
+    # Initialize filter state
+    if 'db_compliance_filter' not in st.session_state:
+        st.session_state.db_compliance_filter = "All Objects"
+    
     # Refresh button in top right
     col_title, col_refresh = render_refresh_button("tab_db_compliance")
     with col_title:
-        st.markdown("### 🗄️ Database Retention Compliance")
+        render_section_header("Database Compliance", "db-icon")
     with col_refresh:
-        if st.button("🔄", key="refresh_tab_db_compliance", help="Refresh data"):
+        if st.button("⟳", key="refresh_tab_db_compliance", help="Refresh data"):
             st.rerun()
     st.markdown("---")
     
@@ -50,34 +54,33 @@ def render_database_compliance_tab(session):
     
     # Display summary metrics
     col1, col2, col3, col4 = st.columns(4)
+    
     with col1:
-        st.metric("Total Objects", total_objects)
+        render_filter_button("Total Objects", total_objects, "filter_all_objects_btn", "All Objects", "db_compliance_filter")
+    
     with col2:
-        st.metric("Compliant", compliant_objects, delta=None)
+        render_filter_button("Compliant", compliant_objects, "filter_compliant_objects_btn", "Compliant Only", "db_compliance_filter")
+    
     with col3:
-        st.metric("Non-Compliant", non_compliant_objects, delta=None)
+        render_filter_button("Non-Compliant", non_compliant_objects, "filter_non_compliant_objects_btn", "Non-Compliant Only", "db_compliance_filter")
+    
     with col4:
-        st.markdown(f"**DB:** {databases} | **Schema:** {schemas} | **Table:** {tables}")
+        # Calculate compliance rate
+        compliance_rate = (compliant_objects / total_objects * 100) if total_objects > 0 else 0
+        render_filter_button("Compliance Rate", f"{compliance_rate:.1f}%", "filter_rate_objects_btn", "Non-Compliant First", "db_compliance_filter")
     
-    st.markdown("---")
+    st.markdown("<br>", unsafe_allow_html=True)
     
-    # Filter options
-    st.markdown("#### Filter Options")
-    col1, col2, col3 = st.columns([1, 1, 2])
+    # Object type filter and search in one row
+    col1, col2 = st.columns([1, 3])
     with col1:
         object_type_filter = st.selectbox(
-            "Object Type",
+            "Filter by Object Type",
             ["All", "DATABASE", "SCHEMA", "TABLE"],
             key="db_object_type_filter"
         )
     with col2:
-        view_option = st.selectbox(
-            "Status",
-            ["All Objects", "Non-Compliant Only", "Compliant Only"],
-            key="db_view_filter"
-        )
-    with col3:
-        search_text = st.text_input("Search by database, schema, or table name", key="db_search")
+        search_text = st.text_input("Search by database, schema, table, or rule name", placeholder="Type to search...", key="db_search")
     
     st.markdown("---")
     
@@ -87,10 +90,15 @@ def render_database_compliance_tab(session):
     else:
         filtered_data = compliance_data
     
-    # Filter compliance data based on status selection
-    if view_option == "Non-Compliant Only":
+    # Filter compliance data based on status selection (use session state)
+    view_filter = st.session_state.db_compliance_filter
+    
+    # Sort if "Non-Compliant First" is selected
+    if view_filter == "Non-Compliant First":
+        filtered_data = sorted(filtered_data, key=lambda x: (len(x['violations']) == 0, str(x.get('database_name', ''))))
+    elif view_filter == "Non-Compliant Only":
         filtered_data = [t for t in filtered_data if t['violations']]
-    elif view_option == "Compliant Only":
+    elif view_filter == "Compliant Only":
         filtered_data = [t for t in filtered_data if not t['violations']]
     
     # Apply search filter
@@ -98,9 +106,10 @@ def render_database_compliance_tab(session):
         search_lower = search_text.lower()
         filtered_data = [
             t for t in filtered_data 
-            if search_lower in str(t.get('database_name', '')).lower() 
-            or search_lower in str(t.get('schema_name', '')).lower()
-            or search_lower in str(t.get('table_name', '')).lower()
+            if (search_lower in str(t.get('database_name', '')).lower() 
+                or search_lower in str(t.get('schema_name', '')).lower()
+                or search_lower in str(t.get('table_name', '')).lower()
+                or any(search_lower in v.get('rule_name', '').lower() for v in t.get('violations', [])))
         ]
     
     # Display results
@@ -114,89 +123,57 @@ def render_database_compliance_tab(session):
     for obj_comp in filtered_data:
         # Determine if compliant
         is_compliant = not obj_comp['violations']
-        status_text = "✅ Compliant" if is_compliant else "❌ Non-Compliant"
         
         object_type = obj_comp['object_type']
         
-        # Build object name based on type
+        # Build object name and details based on type
         if object_type == 'DATABASE':
-            object_name = f"🗄️ {obj_comp['database_name']}"
-            object_icon = "DATABASE"
+            object_name = f"{obj_comp['database_name']}"
+            object_details = f"<strong>Type:</strong> DATABASE | <strong>Owner:</strong> {obj_comp['table_owner']}"
         elif object_type == 'SCHEMA':
-            object_name = f"📁 {obj_comp['database_name']}.{obj_comp['schema_name']}"
-            object_icon = "SCHEMA"
+            object_name = f"{obj_comp['database_name']}.{obj_comp['schema_name']}"
+            object_details = f"<strong>Type:</strong> SCHEMA | <strong>Owner:</strong> {obj_comp['table_owner']}"
         else:  # TABLE
-            object_name = f"📊 {obj_comp['database_name']}.{obj_comp['schema_name']}.{obj_comp['table_name']}"
-            object_icon = "TABLE"
+            object_name = f"{obj_comp['database_name']}.{obj_comp['schema_name']}.{obj_comp['table_name']}"
+            object_details = f"<strong>Type:</strong> {obj_comp.get('table_type', 'TABLE')} | <strong>Owner:</strong> {obj_comp['table_owner']}"
         
-        with st.expander(f"{status_text} - {object_name}", expanded=not is_compliant):
-            # Display metadata based on object type
-            if object_type == 'DATABASE':
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f"**Database:** {obj_comp['database_name']}")
-                    st.markdown(f"**Type:** DATABASE")
-                with col2:
-                    st.markdown(f"**Owner:** {obj_comp['table_owner']}")
-            elif object_type == 'SCHEMA':
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f"**Database:** {obj_comp['database_name']}")
-                    st.markdown(f"**Schema:** {obj_comp['schema_name']}")
-                with col2:
-                    st.markdown(f"**Type:** SCHEMA")
-                    st.markdown(f"**Owner:** {obj_comp['table_owner']}")
-            else:  # TABLE
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.markdown(f"**Database:** {obj_comp['database_name']}")
-                    st.markdown(f"**Schema:** {obj_comp['schema_name']}")
-                with col2:
-                    st.markdown(f"**Table:** {obj_comp['table_name']}")
-                    st.markdown(f"**Type:** {obj_comp.get('table_type', 'N/A')}")
-                with col3:
-                    st.markdown(f"**Owner:** {obj_comp['table_owner']}")
+        # Display object card - compact version (same style as warehouse cards)
+        card_class = "warehouse-compact compliant" if is_compliant else "warehouse-compact non-compliant"
+        
+        with st.container():
+            st.markdown(f"""
+                <div class="{card_class}">
+                    <div class="warehouse-name">{object_name}</div>
+                    <div class="warehouse-info">{object_details}</div>
+                </div>
+            """, unsafe_allow_html=True)
             
             # Show violations if any
             if obj_comp['violations']:
-                st.markdown("##### Violations")
-                for violation in obj_comp['violations']:
-                    st.markdown(f"""
-                        <div style="padding: 10px; margin: 5px 0; background-color: #fff3cd; border-left: 3px solid orange;">
-                            <strong>{violation['rule_name']}</strong><br>
-                            Current: {violation['current_value']} {violation['unit']} | 
-                            Threshold: {violation['operator']} {violation['threshold_value']} {violation['unit']}
-                        </div>
-                    """, unsafe_allow_html=True)
+                # Show violations in compact format
+                col1, col2 = st.columns([3, 1])
                 
-                # Check if any violation has fix_button or fix_sql enabled
-                has_any_fix_button = any(v.get('has_fix_button', False) for v in obj_comp['violations'])
-                has_any_fix_sql = any(v.get('has_fix_sql', False) for v in obj_comp['violations'])
+                with col1:
+                    for violation in obj_comp['violations']:
+                        st.markdown(f"""
+                            <div class="warehouse-violations">
+                                <strong>{violation['rule_name']}:</strong> 
+                                Current = <code>{violation['current_value']} {violation['unit']}</code>, 
+                                Required {violation['operator']} = <code>{violation['threshold_value']} {violation['unit']}</code>
+                            </div>
+                        """, unsafe_allow_html=True)
                 
-                # Only show remediation section if at least one option is available
-                if has_any_fix_button or has_any_fix_sql:
-                    # Generate fix SQL
-                    st.markdown("##### Remediation")
-                    
-                    button_cols = []
-                    if has_any_fix_button:
-                        button_cols.append(1)
-                    if has_any_fix_sql:
-                        button_cols.append(1)
-                    
-                    # Add remaining space
-                    button_cols.append(3 - sum(button_cols))
-                    
-                    cols = st.columns(button_cols)
-                    col_idx = 0
-                    
+                with col2:
                     # Create unique key for buttons
                     obj_key = f"{obj_comp['database_name']}_{obj_comp.get('schema_name', '')}_{obj_comp.get('table_name', '')}_{object_type}"
                     
-                    if has_any_fix_button:
-                        with cols[col_idx]:
-                            button_label = f"🔧 Fix {object_type.title()}"
-                            if st.button(button_label, key=f"fix_{obj_key}", use_container_width=True):
+                    # Check if any violation has fix_button or fix_sql enabled
+                    has_any_fix_button = any(v.get('has_fix_button', False) for v in obj_comp['violations'])
+                    has_any_fix_sql = any(v.get('has_fix_sql', False) for v in obj_comp['violations'])
+                    
+                    if has_any_fix_button or has_any_fix_sql:
+                        if has_any_fix_button:
+                            if st.button("Fix", key=f"fix_{obj_key}", type="primary", use_container_width=True):
                                 try:
                                     # Execute fix for all violations that have fix_button enabled
                                     for violation in obj_comp['violations']:
@@ -211,42 +188,42 @@ def render_database_compliance_tab(session):
                                             )
                                             execute_sql(session, fix_sql)
                                     
-                                    st.success(f"✅ {object_type.title()} configuration updated successfully!")
+                                    st.success(f"{object_type.title()} configuration updated successfully!")
                                     st.rerun()
                                 except Exception as e:
-                                    st.error(f"❌ Error updating {object_type.lower()}: {str(e)}")
-                        col_idx += 1
-                    
-                    if has_any_fix_sql:
-                        with cols[col_idx]:
-                            if st.button("📋 Show SQL", key=f"sql_{obj_key}", use_container_width=True):
-                                st.session_state[f'show_sql_{obj_key}'] = True
-                    
-                    # Show SQL if button was clicked
-                    if st.session_state.get(f'show_sql_{obj_key}', False):
-                        sql_statements = []
-                        for violation in obj_comp['violations']:
-                            if violation.get('has_fix_sql', False):
-                                sql = generate_table_fix_sql(
-                                    obj_comp['database_name'],
-                                    obj_comp.get('schema_name'),
-                                    obj_comp.get('table_name'),
-                                    violation['parameter'],
-                                    violation['threshold_value'],
-                                    object_type
-                                )
-                                sql_statements.append(sql)
+                                    st.error(f"Error updating {object_type.lower()}: {str(e)}")
                         
-                        if sql_statements:
-                            combined_sql = "\n\n".join(sql_statements)
-                            st.code(combined_sql, language="sql")
-                            
-                            if st.button("Hide SQL", key=f"hide_sql_{obj_key}"):
-                                st.session_state[f'show_sql_{obj_key}'] = False
-                                st.rerun()
+                        if has_any_fix_sql:
+                            if st.button("Show SQL", key=f"sql_{obj_key}", use_container_width=True):
+                                st.session_state[f'show_sql_{obj_key}'] = True
+                
+                # Show SQL if button was clicked
+                if st.session_state.get(f'show_sql_{obj_key}', False):
+                    sql_statements = []
+                    for violation in obj_comp['violations']:
+                        if violation.get('has_fix_sql', False):
+                            sql = generate_table_fix_sql(
+                                obj_comp['database_name'],
+                                obj_comp.get('schema_name'),
+                                obj_comp.get('table_name'),
+                                violation['parameter'],
+                                violation['threshold_value'],
+                                object_type
+                            )
+                            sql_statements.append(sql)
+                    
+                    if sql_statements:
+                        combined_sql = "\n\n".join(sql_statements)
+                        st.code(combined_sql, language="sql")
+                        
+                        if st.button("Hide SQL", key=f"hide_sql_{obj_key}"):
+                            st.session_state[f'show_sql_{obj_key}'] = False
+                            st.rerun()
+            
+            st.markdown("<br>", unsafe_allow_html=True)
     
     # Bulk fix option for all non-compliant objects
-    if view_option == "Non-Compliant Only" and filtered_data:
+    if view_filter == "Non-Compliant Only" and filtered_data:
         st.markdown("---")
         st.markdown("#### Bulk Actions")
         
@@ -273,7 +250,7 @@ def render_database_compliance_tab(session):
             
             if has_any_fix_button:
                 with cols[col_idx]:
-                    if st.button("🔧 Fix All Non-Compliant Objects", type="primary", use_container_width=True):
+                    if st.button("Fix All Non-Compliant Objects", key="fix_all_objects", type="primary", use_container_width=True):
                         try:
                             fixed_count = 0
                             for obj_comp in filtered_data:
@@ -291,15 +268,15 @@ def render_database_compliance_tab(session):
                                             execute_sql(session, fix_sql)
                                             fixed_count += 1
                             
-                            st.success(f"✅ Fixed {fixed_count} violations across {len(filtered_data)} objects!")
+                            st.success(f"Fixed {fixed_count} violations across {len(filtered_data)} objects!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"❌ Error during bulk fix: {str(e)}")
+                            st.error(f"Error during bulk fix: {str(e)}")
                 col_idx += 1
             
             if has_any_fix_sql:
                 with cols[col_idx]:
-                    if st.button("📋 Generate SQL for All", use_container_width=True):
+                    if st.button("Generate SQL for All", key="sql_all_objects", use_container_width=True):
                         st.session_state['show_bulk_sql'] = True
             
             # Show bulk SQL if requested
