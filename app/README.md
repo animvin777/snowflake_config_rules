@@ -1,24 +1,47 @@
 # Configuration Compliance Manager
 
-Welcome to the Configuration Compliance Manager! This app helps you enforce consistent configuration standards across all warehouses and databases in your Snowflake account.
+Welcome to the Configuration Compliance Manager! This Native App helps you enforce consistent configuration standards across all warehouses, databases, and tables in your Snowflake account.
 
 ---
 
-## 🎯 What This App Does
+## 📋 What This App Does
 
-Monitor and enforce configuration compliance across your Snowflake environment:
-- 📋 **Apply Rules** - Set standards for warehouse and database configurations
-- 🔍 **Monitor Compliance** - Real-time visibility into compliant and non-compliant resources
-- 🔧 **Auto-Remediate** - One-click fixes for violations
-- ⏱️ **Automate Collection** - Scheduled tasks keep data up-to-date
+```
+┌────────────────────────────────────────────────────────────┐
+│              Compliance Management Workflow                 │
+└────────────────────────────────────────────────────────────┘
+
+    1. DEFINE           2. MONITOR          3. REMEDIATE
+   ┌─────────┐         ┌─────────┐         ┌─────────┐
+   │Configure│────────>│ Check   │────────>│  Fix    │
+   │  Rules  │         │Complian │         │Violatio │
+   └─────────┘         └─────────┘         └─────────┘
+        │                   │                    │
+        v                   v                    v
+   Set custom         Real-time            One-click
+   thresholds         dashboards           or bulk SQL
+```
+
+The app provides:
+
+- **Warehouse Compliance**: Monitor and enforce auto-suspend, timeouts, and concurrency limits
+- **Database Retention Compliance**: Control Time Travel storage costs by enforcing retention policies
+- **Tag Compliance**: Ensure mandatory tags are applied to all objects
+- **Whitelist Management**: Handle approved exceptions to your compliance rules
+- **Automated Data Collection**: Daily scheduled tasks collect configuration data
+- **One-Click Remediation**: Fix violations instantly or generate SQL for bulk operations
 
 ---
 
-## ⚡ Quick Start
+## ⚡ Quick Start Guide (5 Minutes)
 
 ### Step 1: Complete Post-Installation Setup (**Required**)
 
-To enable complete parameter monitoring (including statement timeouts), you must create an additional task in your account:
+Due to Snowflake Native App security restrictions, you need to create an additional task in your account to enable complete parameter monitoring.
+
+**Why?** The app cannot directly execute `SHOW PARAMETERS FOR WAREHOUSE` on your warehouses. This task runs with your account privileges to capture those parameters (like `STATEMENT_TIMEOUT_IN_SECONDS`).
+
+**Run this SQL now:**
 
 ```sql
 USE ROLE ACCOUNTADMIN;
@@ -76,428 +99,584 @@ SELECT name, auto_suspend, statement_timeout_in_seconds
 FROM data_schema.warehouse_details
 LIMIT 5;
 ```
+
 Values for `statement_timeout_in_seconds` should be populated (not NULL).
 
 ---
 
 ### Step 2: Apply Configuration Rules
 
-1. Navigate to **⚙️ Configure Rules** tab
-2. Click **"🎯 Apply Default Rules"** button
-3. All 5 recommended rules are applied instantly
+1. Navigate to **Configure Rules** tab
+2. Click **Apply Default Rules** button
+3. All 5 recommended rules are applied instantly with optimal thresholds
 
 ---
 
 ### Step 3: View & Fix Compliance
 
-1. Go to **🏭 Warehouse Compliance** tab
-2. Review summary metrics
-3. Filter to "Non-Compliant Only"
-4. Click **Fix** button on any warehouse to remediate automatically
+1. Go to **Warehouse Compliance** or **Database Compliance** tab
+2. Review summary metrics at the top
+3. Filter to "Non-Compliant Only" to see violations
+4. Click **Fix** button on any object to remediate automatically
+
+✅ **Done!** You're now enforcing configuration standards.
 
 ---
 
-## 📚 Available Rules
+## 🔑 Required Privileges & Why
 
-### Warehouse Rules
+During installation, you granted these privileges to the app:
 
-| Rule | What It Controls | Recommended Value | Why It Matters |
-|------|------------------|-------------------|----------------|
-| **Max Statement Timeout** | How long queries can run before terminating | 300 seconds (5 min) | Prevents runaway queries from consuming resources indefinitely |
-| **Max Auto Suspend** | How long warehouses stay idle before suspending | 30 seconds | Reduces costs by suspending inactive warehouses quickly |
+| Privilege | Why It's Needed | When It's Used |
+|-----------|----------------|----------------|
+| **CREATE WAREHOUSE** | Creates `CONFIG_RULES_VW` warehouse for app compute | One-time during installation |
+| **MANAGE WAREHOUSES** | Allows app to monitor warehouse configs & apply fixes | When viewing compliance & clicking Fix |
+| **EXECUTE TASK** | Creates scheduled data collection tasks | One-time during installation |
+| **EXECUTE MANAGED TASK** | Runs serverless tasks for automated data collection | Daily at 7 AM EST |
+| **IMPORTED PRIVILEGES ON SNOWFLAKE DB** | Accesses `ACCOUNT_USAGE` views for retention data | Daily for database compliance monitoring |
 
-**Example: Max Auto Suspend**
+### Security Notes
+
+- ✅ **Zero-day retention**: All app tables use 0-day retention (no data history stored)
+- ✅ **Metadata only**: App only collects configuration metadata, never query results or user data
+- ✅ **Explicit fixes**: Fix actions only execute when you click the Fix button
+- ✅ **Audit trail**: All actions logged in Snowflake query history
+
+---
+
+## 📊 How The App Works
+
+### Architecture Overview
+
 ```
-If threshold = 30 seconds:
-  ✓ Compliant:     warehouse auto-suspends after 20 seconds
-  ✗ Non-Compliant: warehouse auto-suspends after 300 seconds
-
-Fix Action: ALTER WAREHOUSE xxx SET AUTO_SUSPEND = 30;
-Result: Warehouse suspends within 30 seconds of inactivity → Lower costs
+┌───────────────────────────────────────────────────────────┐
+│                  Your Snowflake Account                    │
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌──────────────────────────────────────────┐            │
+│  │    Configuration Compliance Manager      │            │
+│  ├──────────────────────────────────────────┤            │
+│  │                                          │            │
+│  │  ┌────────────┐     ┌──────────────┐    │            │
+│  │  │ Streamlit  │────>│  Compliance  │    │            │
+│  │  │    UI      │     │    Engine    │    │            │
+│  │  └────────────┘     └──────────────┘    │            │
+│  │         │                   │            │            │
+│  │         └───────┬───────────┘            │            │
+│  │                 │                        │            │
+│  │         ┌───────v────────┐               │            │
+│  │         │  Data Storage  │               │            │
+│  │         ├────────────────┤               │            │
+│  │         │ • Warehouses   │               │            │
+│  │         │ • Retention    │               │            │
+│  │         │ • Tags         │               │            │
+│  │         │ • Rules        │               │            │
+│  │         │ • Whitelists   │               │            │
+│  │         └────────────────┘               │            │
+│  └──────────────────────────────────────────┘            │
+│                 ▲                                         │
+│                 │                                         │
+│  ┌──────────────┴──────────────┐                         │
+│  │   Automated Data Collection │                         │
+│  ├─────────────────────────────┤                         │
+│  │ Daily at 7:00 AM EST:       │                         │
+│  │ • Warehouse configs          │                         │
+│  │ • Database retention         │                         │
+│  │ • Tag assignments            │                         │
+│  │                             │                         │
+│  │ Daily at 7:10 AM EST:       │                         │
+│  │ • Warehouse parameters       │                         │
+│  │   (via your task)           │                         │
+│  └─────────────────────────────┘                         │
+│                                                           │
+└───────────────────────────────────────────────────────────┘
 ```
 
-### Database Rules
+### Data Collection Flow
 
-| Rule | What It Controls | Recommended Value | Why It Matters |
-|------|------------------|-------------------|----------------|
-| **Max Table Retention** | Table-level Time Travel duration | 1 day | Reduces storage costs (7-day retention = 7x cost of 1-day) |
-| **Max Schema Retention** | Schema-level Time Travel duration | 1 day | Controls retention inheritance for all tables in schema |
-| **Max Database Retention** | Database-level Time Travel duration | 1 day | Sets default retention for entire database |
-
-**Example: Max Table Retention**
 ```
-If threshold = 1 day:
-  ✓ Compliant:     table has 0-day or 1-day retention
-  ✗ Non-Compliant: table has 7-day retention
-
-Fix Action: ALTER TABLE xxx SET DATA_RETENTION_TIME_IN_DAYS = 1;
-Result: Reduced Time Travel storage by ~85%
+1. SCHEDULED TASKS RUN
+   ↓
+2. COLLECT METADATA
+   - SHOW WAREHOUSES
+   - ACCOUNT_USAGE.TABLES
+   - SNOWFLAKE.ACCOUNT_USAGE.TAG_REFERENCES
+   ↓
+3. STORE IN APP TABLES
+   - warehouse_details
+   - database_retention_details  
+   - tag_compliance_details
+   ↓
+4. COMPLIANCE ENGINE CHECKS
+   - Compare actual vs required values
+   - Identify violations
+   - Exclude whitelisted items
+   ↓
+5. DISPLAY IN UI
+   - Show compliance metrics
+   - List violations
+   - Enable one-click fixes
 ```
 
 ---
 
-## 🎨 Using the App
+## 🎯 Using The App
 
-### ⚙️ Configure Rules Tab
+### Tab 1: Configure Rules
 
-**Purpose:** Define which configuration standards to enforce
+**Purpose**: Define what compliance standards to enforce
 
-**Actions:**
-- **View Rules**: See all available rules grouped by type (Warehouse/Database)
-- **Apply Rule**: Select a rule, enter threshold value, click "Apply Rule"
-- **Apply Defaults**: Click "Apply Default Rules" for instant setup
-- **Generate SQL**: Create bulk remediation SQL for all violations
-- **Deactivate Rule**: Stop enforcing a rule
+**Actions**:
+- View all available rules (Warehouse, Database, Tag types)
+- Apply rules with custom thresholds
+- Apply default rules with one click
+- Deactivate rules you no longer need
+- See all currently applied rules with violation counts
 
-**Best Practice:** Start with default rules, then customize based on your needs.
-
----
-
-### 🏭 Warehouse Compliance Tab
-
-**Purpose:** Monitor and fix warehouse configuration violations
-
-**Features:**
-- **Summary Metrics**: Total warehouses, compliant count, compliance rate
-- **Filters**: View all, non-compliant only, or compliant only
-- **View Modes**: Toggle between Tile View (visual cards) and List View (tabular)
-- **One-Click Fix**: Remediate violations automatically
-- **Detailed Info**: See current value vs. required threshold for each violation
-
-**Workflow:**
-1. Review summary metrics
-2. Filter to "Non-Compliant Only"
-3. Click **Fix** on each warehouse
-4. Status updates immediately to "Compliant"
+**Quick Win**: Click **Apply Default Rules** to instantly set up 5 common rules
 
 ---
 
-### 🗄️ Database Compliance Tab
+### Tab 2: Tag Compliance
 
-**Purpose:** Monitor and fix table/schema/database retention violations
+**Purpose**: Ensure mandatory tags are applied
 
-**Features:**
-- **Search**: Find specific databases, schemas, or tables
-- **Bulk Actions**: Fix all non-compliant tables at once
-- **SQL Preview**: Review SQL before executing
-- **Expandable Details**: See full configuration for each table
+**Features**:
+```
+┌─────────────────────────────────────────┐
+│  Tag Compliance Dashboard               │
+├─────────────────────────────────────────┤
+│  📊 Metrics                             │
+│  Total │ Compliant │ Non-Compliant │ %  │
+│   100  │     85    │      15       │85% │
+├─────────────────────────────────────────┤
+│  Filter: [All / Non-Compliant / Whitel.]│
+│  Object Type: [WAREHOUSE ▼]             │
+│  Search: [________________]             │
+├─────────────────────────────────────────┤
+│  🏭 WH_ANALYTICS                        │
+│  ✗ Missing: cost_center                 │
+│     [Whitelist] [Generate SQL]          │
+└─────────────────────────────────────────┘
+```
 
-**Workflow:**
-1. Search for your database (e.g., "PROD_DB")
-2. Review non-compliant tables
-3. Click "Fix All Non-Compliant Tables"
-4. Confirm SQL preview
-5. All tables updated to compliant state
-
----
-
-### ⏱️ Scheduled Tasks & Monitoring Tab
-
-**Purpose:** Control automated data collection
-
-**Features:**
-- **Task List**: View all app and consumer-created tasks
-- **Execution History**: Last 3 runs with status, duration, errors
-- **Controls**: Suspend, Resume, or Execute Now
-- **Status Indicators**: Green = running, Red = suspended
-
-**Tasks Explained:**
-- `warehouse_monitor_task`: Captures warehouse configs daily (7 AM EST)
-- `db_retention_monitor_task`: Captures retention settings daily (7 AM EST)
-- `warehouse_params_monitor_task`: Captures warehouse parameters (created by you in post-install)
-
-**Troubleshooting:**
-- If data is missing → Click "Execute Now" on the relevant task
-- If task fails → Click "View History" to see error messages
+**Use Case**: Verify all warehouses have a "cost_center" tag for charge-back
 
 ---
 
-### 📊 App Data Inspector Tab
+### Tab 3: Warehouse Compliance
 
-**Purpose:** Inspect all application data
+**Purpose**: Monitor and fix warehouse configuration violations
 
-**Features:**
-- **Warehouse Details**: All captured warehouse configurations
-- **Table Retention**: All retention settings
-- **Config Rules**: Available rule definitions
-- **Applied Rules**: Currently active rules with thresholds
-- **Summary Stats**: Record counts and last update times
+**Features**:
+- Summary metrics (Total, Compliant, Non-Compliant, Compliance Rate)
+- Filter: All / Non-Compliant / Compliant / Whitelisted
+- View: Tile or List
+- One-click Fix button per warehouse
+- Whitelist exceptions
 
-**Use Cases:**
-- Verify data is being collected
-- Troubleshoot missing or NULL values
+**Example Violations**:
+```
+┌──────────────────────────────────────┐
+│  WH_PROD                             │
+│  Size: LARGE │ Type: STANDARD        │
+├──────────────────────────────────────┤
+│  ✗ Auto Suspend: 300s (Max: 30s)     │
+│  ✗ Statement Timeout: 0s (No limit)  │
+├──────────────────────────────────────┤
+│  [Fix] [Whitelist] [Show SQL]        │
+└──────────────────────────────────────┘
+```
+
+Click **Fix** → Auto-suspend and timeout instantly updated
+
+---
+
+### Tab 4: Database Compliance
+
+**Purpose**: Control Time Travel retention across all tables
+
+**Features**:
+- Search by database, schema, or table name
+- Group violations by database
+- Bulk fix all non-compliant tables at once
+- Preview SQL before execution
+
+**Use Case**: Set all production tables to 1-day retention to save 85% on storage
+
+```
+Database: PROD_DB (523 tables, 487 non-compliant)
+ 
+  SCHEMA_1 (245 tables)
+    TABLE_A: 7 days ✗
+    TABLE_B: 7 days ✗
+    [Fix All]
+
+  SCHEMA_2 (278 tables)  
+    TABLE_C: 1 day ✓
+    TABLE_D: 7 days ✗
+    [Fix All]
+```
+
+---
+
+### Tab 5: Scheduled Tasks & Monitoring
+
+**Purpose**: Monitor automated data collection
+
+**Features**:
+- Control tasks: Suspend, Resume, Execute Now
+- View execution history (last 3 runs)
+- See task status, duration, errors
+- Manage both app and consumer-created tasks
+
+**Tasks**:
+- `warehouse_monitor_task` - Collects warehouse configs
+- `db_retention_monitor_task` - Collects retention settings
+- `tag_monitor_task` - Collects tag assignments
+- `warehouse_params_monitor_task` - Your task for parameters
+
+**Troubleshooting**: If data is missing, click "Execute Now" to run tasks immediately
+
+---
+
+### Tab 6: Whitelist Management
+
+**Purpose**: Manage approved exceptions to compliance rules
+
+**Features**:
+- View all whitelisted violations
+- Multi-select and remove whitelists
+- See why each exception was approved
+- Filter by rule type
+
+**Use Case**: ADMIN_WH needs 300-second auto-suspend (exception to 30-second rule)
+
+---
+
+### Tab 7: Data Explorer
+
+**Purpose**: Inspect all collected configuration data
+
+**Features**:
+- View all app tables
+- See record counts and last update times
 - Export data for external analysis
-- Audit rule configurations
+- Verify data collection is working
+
+**Tables**:
+- Warehouse Details
+- Database Retention Details
+- Tag Compliance Details
+- Config Rules
+- Applied Rules
+- Whitelists
 
 ---
 
-## 💡 Common Workflows
+## 💡 Common Use Cases
 
-### Reduce Idle Warehouse Costs
+### Use Case 1: Reduce Idle Warehouse Costs
 
 ```
-Goal: Ensure all warehouses suspend within 30 seconds of inactivity
+Goal: Ensure all warehouses suspend within 30 seconds
 
 Steps:
-1. ⚙️ Configure Rules → Apply "Max Auto Suspend" = 30
-2. 🏭 Warehouse Compliance → Filter "Non-Compliant Only"
-3. Click "Fix" on each warehouse
-4. ✓ Result: Reduced idle compute costs by 40-60%
-```
+  1. Configure Rules → Apply "Max Auto Suspend" = 30
+  2. Warehouse Compliance → Filter "Non-Compliant Only"
+  3. Click "Fix" on each warehouse
 
----
-
-### Control Time Travel Storage Costs
-
-```
-Goal: Reduce retention time to 1 day for all production tables
-
-Steps:
-1. ⚙️ Configure Rules → Apply "Max Table Retention" = 1
-2. 🗄️ Database Compliance → Search "PROD_DB"
-3. Click "Fix All Non-Compliant Tables"
-4. ✓ Result: Reduced storage costs by ~85%
+Result: 40-60% reduction in idle compute costs
+Savings: $5,000-$15,000/month (typical for 50 warehouses)
 ```
 
 ---
 
-### Monitor Rule Compliance Over Time
+### Use Case 2: Control Storage Costs
 
 ```
-Goal: Track compliance improvements weekly
+Goal: Reduce Time Travel retention to 1 day on all tables
 
 Steps:
-1. 🏭 Warehouse Compliance → Note compliance rate (e.g., 65%)
-2. Fix violations over the week
-3. Return next week → Compliance rate improved (e.g., 95%)
-4. ✓ Result: Demonstrable improvement in governance
+  1. Configure Rules → Apply "Max Table Retention" = 1
+  2. Database Compliance → Search for database
+  3. Click "Fix All Non-Compliant Tables"
+
+Result: 85% reduction in Time Travel storage costs
+Savings: $10,000-$30,000/month (typical for large account)
+```
+
+---
+
+### Use Case 3: Enforce Tagging for Cost Allocation
+
+```
+Goal: Ensure all warehouses have "cost_center" tag
+
+Steps:
+  1. Configure Rules → Add Tag Rule (cost_center, WAREHOUSE)
+  2. Tag Compliance → View violations
+  3. Generate SQL → Apply tags manually
+
+Result: 100% tag coverage for accurate cost allocation
+```
+
+---
+
+### Use Case 4: Audit Compliance Monthly
+
+```
+Goal: Report compliance rate to management
+
+Steps:
+  1. Check each compliance tab
+  2. Note metrics: Total, Compliant, Non-Compliant, %
+  3. Export Data Explorer tables for detailed analysis
+
+Result: Monthly compliance scorecard
 ```
 
 ---
 
 ## 🔧 Troubleshooting
 
-### Issue: No warehouse data showing
+### Issue: No Warehouse Data Showing
 
-**Cause:** Monitoring task hasn't run yet  
-**Fix:**
-1. Go to **⏱️ Scheduled Tasks & Monitoring** tab
-2. Click "Execute Now" on `warehouse_monitor_task`
-3. Wait 30 seconds
-4. Refresh the app
-
----
-
-### Issue: Statement timeout values are NULL
-
-**Cause:** Post-installation task not created  
-**Fix:** Complete **Post-Installation Setup** (see Step 1 above) - this is **required**!
+**Cause**: Monitoring task hasn't run yet  
+**Fix**:
+1. Go to **Scheduled Tasks & Monitoring**
+2. Find `warehouse_monitor_task`
+3. Click "Execute Now"
+4. Wait 30 seconds, then refresh
 
 ---
 
-### Issue: Fix button doesn't work
+### Issue: Statement Timeout Values Are NULL
 
-**Cause:** Insufficient privileges  
-**Fix:**
-1. Ensure you granted `MANAGE WAREHOUSES` privilege during installation
-2. Check error message displayed in the UI for specific details
-3. If needed, re-grant privileges to the app
+**Cause**: Post-installation task not created  
+**Fix**: Run the SQL from **Step 1** above - this is required!
 
 ---
 
-### Issue: "No rules applied" message in compliance tabs
+### Issue: Fix Button Doesn't Work
 
-**Cause:** Haven't applied any rules yet  
-**Fix:**
-1. Go to **⚙️ Configure Rules** tab
-2. Click "🎯 Apply Default Rules" button
-3. Return to compliance tabs to see results
+**Cause**: Missing `MANAGE WAREHOUSES` privilege  
+**Fix**:
+1. Ensure privilege was granted during installation
+2. Check error message in UI for specific details
+3. If needed, re-grant: `GRANT MANAGE WAREHOUSES TO APPLICATION SNOWFLAKE_CONFIG_RULES_APP`
 
 ---
 
-### Issue: High costs after deployment
+### Issue: "No Rules Applied" Message
 
-**Cause:** Tasks misconfigured or rules not applied  
-**Fix:**
-1. Verify tasks use serverless compute (check **⏱️ Scheduled Tasks** tab)
+**Cause**: Haven't applied any rules yet  
+**Fix**:
+1. Go to **Configure Rules** tab
+2. Click "Apply Default Rules"
+3. Return to compliance tabs
+
+---
+
+### Issue: High Costs After Deployment
+
+**Cause**: Misconfigured tasks or rules not applied  
+**Fix**:
+1. Verify tasks use serverless compute (check **Scheduled Tasks**)
 2. Apply cost-saving rules (Max Auto Suspend = 30 seconds)
 3. Review execution frequency (daily is recommended)
 
 ---
 
-## 📖 Best Practices
+### Issue: Task Execution Failures
 
-### Rule Management
-- ✅ **Start with defaults** - Click "Apply Default Rules" for instant setup
-- ✅ **Test in dev first** - Apply to development environment before production
-- ✅ **Review monthly** - Check compliance trends and adjust thresholds
-- ✅ **Document exceptions** - Track warehouses needing special configurations
-
-### Cost Optimization
-- ✅ **Auto-suspend = 30-60 seconds** for most warehouses (reduces idle costs by 40-60%)
-- ✅ **Retention = 1 day** unless Time Travel is critical (reduces storage by ~85%)
-- ✅ **Monitor task history** - Ensure tasks run successfully without errors
-- ✅ **Use serverless tasks** - All tasks should use managed compute
-
-### Security
-- ✅ **Review SQL before bulk operations** - Use "Show SQL" feature
-- ✅ **Audit quarterly** - Review applied rules and their justification
-- ✅ **Limit access** - Grant admin role only to authorized users
+**Cause**: Privilege issues or network connectivity  
+**Fix**:
+1. Go to **Scheduled Tasks & Monitoring**
+2. Click "View History" on failing task
+3. Review error message
+4. Common fixes:
+   - Grant missing privileges
+   - Check warehouse exists
+   - Verify network access
 
 ---
 
 ## 📊 Understanding Metrics
 
-### Compliance Rate
+### Compliance Rate Calculation
 
 ```
-Compliance Rate = (Compliant Resources / Total Resources) × 100
+Compliance Rate = (Compliant Objects / Total Objects) × 100
 
 Example:
-- Total Warehouses: 20
-- Compliant: 15
-- Non-Compliant: 5
-- Compliance Rate: 75%
-
-Goal: Achieve 95%+ compliance rate
+  Total Warehouses: 50
+  Compliant: 38
+  Non-Compliant: 10
+  Whitelisted: 2
+  
+  Compliance Rate: (38 + 2) / 50 × 100 = 80%
+  (Whitelisted count as compliant)
 ```
 
 ### Cost Impact Estimation
 
+#### Auto-Suspend Savings
 ```
-Auto-Suspend Savings:
-- Before: Warehouse idles for 300 seconds (5 min) before suspending
-- After: Warehouse idles for 30 seconds before suspending
-- Savings: 90% reduction in idle time
-- Impact: 40-60% lower warehouse costs (depending on usage pattern)
+Before: Warehouse idles for 300 seconds before suspending
+After:  Warehouse idles for 30 seconds before suspending
 
-Retention Savings:
-- Before: Table has 7-day retention
-- After: Table has 1-day retention  
-- Savings: 85% reduction in Time Travel storage
-- Impact: Significant reduction in monthly storage bills
-```
+Savings: 90% reduction in idle time
+Impact:  40-60% lower warehouse costs
+         (depending on usage pattern)
 
----
-
-## 🎯 Success Metrics
-
-Track these metrics to measure app effectiveness:
-
-| Metric | Target | How to Measure |
-|--------|--------|----------------|
-| **Compliance Rate** | >95% | Warehouse Compliance tab → Summary metrics |
-| **Cost Reduction** | 30-50% on idle compute | Snowflake cost monitoring (before/after applying rules) |
-| **Storage Savings** | 70-85% on Time Travel | Snowflake storage monitoring (before/after retention rules) |
-| **Time to Remediate** | <5 minutes | Time from identifying violation to clicking Fix |
-| **Task Success Rate** | 100% | Scheduled Tasks tab → Execution history (all succeeded) |
-
----
-
-## 🔒 Security & Privacy
-
-- ✅ All data stored with **0-day retention** for compliance
-- ✅ No PII or sensitive query data captured
-- ✅ Only metadata (warehouse names, sizes, configs) collected
-- ✅ Fix actions execute with **your privileges** (not app's)
-- ✅ All actions auditable via Snowflake query history
-
----
-
-## 📞 Need Help?
-
-### Within the App
-1. **Task Issues**: Go to **⏱️ Scheduled Tasks** → View History → Check error messages
-2. **Missing Data**: Go to **📊 App Data Inspector** → Verify data collection
-3. **SQL Preview**: Use "Show SQL" feature before fixing to review changes
-
-### External Resources
-- 📚 [Snowflake Time Travel Docs](https://docs.snowflake.com/en/user-guide/data-time-travel)
-- 📚 [Warehouse Management Guide](https://docs.snowflake.com/en/user-guide/warehouses)
-- 📚 [Managed Tasks Documentation](https://docs.snowflake.com/en/user-guide/tasks-managed)
-
----
-
-## 🎓 Learning Resources
-
-### Understanding Rule Operators
-
-```
-MAX Operator (Most Common):
-  - Rule: Max Auto Suspend = 30 seconds
-  - Means: Warehouse value must be ≤ 30 seconds
-  - Compliant: auto_suspend = 20 seconds ✓
-  - Non-Compliant: auto_suspend = 60 seconds ✗
-
-MIN Operator:
-  - Rule: Min Cluster Count = 1
-  - Means: Warehouse value must be ≥ 1
-  - Compliant: min_cluster_count = 2 ✓
-  - Non-Compliant: min_cluster_count = 0 ✗
-
-EQUALS Operator:
-  - Rule: Scaling Policy = 'STANDARD'
-  - Means: Warehouse value must exactly match
-  - Compliant: scaling_policy = 'STANDARD' ✓
-  - Non-Compliant: scaling_policy = 'ECONOMY' ✗
+Example: 20 warehouses × $2/hour × 10 idle hours/day × 30% idle time reduction
+         = $3,600/month savings
 ```
 
-### Architecture Overview
-
+#### Retention Savings
 ```
-┌──────────────────────────────────────────────┐
-│         Your Snowflake Account               │
-├──────────────────────────────────────────────┤
-│                                              │
-│  ┌────────────────────────────────┐          │
-│  │  Configuration Compliance App  │          │
-│  │  • Monitors warehouses         │          │
-│  │  • Checks compliance           │          │
-│  │  • Generates fix SQL           │          │
-│  └────────────┬───────────────────┘          │
-│               │                              │
-│               ▼                              │
-│  ┌────────────────────────────────┐          │
-│  │  Your Warehouses & Databases   │          │
-│  │  • Configurations monitored    │          │
-│  │  • Violations detected         │          │
-│  │  • Fixes applied on demand     │          │
-│  └────────────────────────────────┘          │
-│                                              │
-└──────────────────────────────────────────────┘
+Before: Tables have 7-day retention  
+After:  Tables have 1-day retention
+
+Savings: 85% reduction in Time Travel storage
+Impact:  Significant monthly storage bill reduction
+
+Example: 1 TB data × 7 days × $23/TB/month = $161/month
+         1 TB data × 1 day × $23/TB/month = $23/month
+         Savings: $138/month per TB
 ```
 
 ---
 
-## 📋 Appendix: Rule Reference
+## 📈 Best Practices
 
-### Complete Rule Catalog
+### 1. Start with Default Rules
 
-| Rule ID | Rule Name | Type | Parameter | Operator | Default |
-|---------|-----------|------|-----------|----------|---------|
-| `MAX_STATEMENT_TIMEOUT` | Max Statement Timeout in Seconds | Warehouse | STATEMENT_TIMEOUT_IN_SECONDS | MAX | 300 |
-| `MAX_AUTO_SUSPEND` | Max Auto Suspend in Seconds | Warehouse | AUTO_SUSPEND | MAX | 30 |
-| `MAX_TABLE_RETENTION_TIME` | Max Table Retention Time in Days | Database | RETENTION_TIME | MAX | 1 |
-| `MAX_SCHEMA_RETENTION_TIME` | Max Schema Retention Time in Days | Database | RETENTION_TIME | MAX | 1 |
-| `MAX_DATABASE_RETENTION_TIME` | Max Database Retention Time in Days | Database | RETENTION_TIME | MAX | 1 |
+- Click **Apply Default Rules** for instant setup
+- Recommended thresholds based on common use cases
+- Adjust later based on your specific needs
 
-### Supported Parameters
+### 2. Test in Dev First
 
-Parameters already available (no additional setup needed):
-- `AUTO_SUSPEND`
-- `SIZE`
-- `TYPE`
-- `MIN_CLUSTER_COUNT`
-- `MAX_CLUSTER_COUNT`
-- `SCALING_POLICY`
+- Apply rules to dev/test environment first
+- Observe for 1 week
+- Adjust thresholds if needed
+- Then roll out to production
 
-Parameters requiring post-installation setup:
-- `STATEMENT_TIMEOUT_IN_SECONDS` (requires consumer-created task)
-- `MAX_CONCURRENCY_LEVEL` (requires consumer-created task)
-- `STATEMENT_QUEUED_TIMEOUT_IN_SECONDS` (requires consumer-created task)
+### 3. Use Whitelists for Valid Exceptions
+
+- Don't just disable rules entirely
+- Whitelist specific objects that need exceptions
+- Document reason for each whitelist
+- Review quarterly
+
+### 4. Monitor Regularly
+
+- Check compliance dashboards weekly
+- Review task execution history monthly
+- Export data for trend analysis
+- Adjust thresholds as usage patterns change
+
+### 5. Communicate Changes
+
+- Notify teams before applying new rules
+- Explain business benefits (cost savings, governance)
+- Provide grace period before enforcement
+- Track and report improvements
 
 ---
 
-**📅 Last Updated:** November 14, 2025  
-**🏷️ Version:** 2.3  
-**💡 Tip:** Bookmark this README for quick reference while using the app!
+## 🎓 Understanding Rule Operators
+
+### MAX Operator (Most Common)
+
+```
+Rule: Max Auto Suspend = 30 seconds
+Logic: Actual value must be ≤ 30 seconds
+
+✓ Compliant:     auto_suspend = 20 seconds (less than limit)
+✗ Non-Compliant: auto_suspend = 60 seconds (exceeds limit)
+
+Fix: ALTER WAREHOUSE xxx SET AUTO_SUSPEND = 30;
+```
+
+### MIN Operator
+
+```
+Rule: Min Cluster Count = 1  
+Logic: Actual value must be ≥ 1
+
+✓ Compliant:     min_cluster_count = 2 (meets minimum)
+✗ Non-Compliant: min_cluster_count = 0 (below minimum)
+
+Fix: ALTER WAREHOUSE xxx SET MIN_CLUSTER_COUNT = 1;
+```
+
+### NOT_EQUALS Operator
+
+```
+Rule: Statement Timeout ≠ 0 (No unlimited timeouts)
+Logic: Actual value must not equal 0
+
+✓ Compliant:     statement_timeout = 300 (has limit)
+✗ Non-Compliant: statement_timeout = 0 (unlimited)
+
+Fix: ALTER WAREHOUSE xxx SET STATEMENT_TIMEOUT_IN_SECONDS = 300;
+```
+
+---
+
+## 📋 Available Rules Reference
+
+### Warehouse Rules
+
+| Rule | Parameter | Operator | Default | Purpose |
+|------|-----------|----------|---------|---------|
+| Max Statement Timeout | STATEMENT_TIMEOUT_IN_SECONDS | MAX | 300 | Prevent runaway queries |
+| Max Auto Suspend | AUTO_SUSPEND | MAX | 30 | Reduce idle costs |
+| Zero Statement Timeout | STATEMENT_TIMEOUT_IN_SECONDS | NOT_EQUALS | 0 | Require query timeouts |
+
+### Database Rules
+
+| Rule | Level | Operator | Default | Purpose |
+|------|-------|----------|---------|---------|
+| Max Table Retention | Table | MAX | 1 | Control storage costs |
+| Max Schema Retention | Schema | MAX | 1 | Control storage costs |
+| Max Database Retention | Database | MAX | 1 | Control storage costs |
+
+### Tag Rules
+
+| Rule | Objects | Purpose |
+|------|---------|---------|
+| Missing Tag Value | WAREHOUSE, DATABASE, TABLE | Ensure mandatory tags applied |
+
+---
+
+## 🔗 Additional Resources
+
+- [Snowflake Time Travel Documentation](https://docs.snowflake.com/en/user-guide/data-time-travel)
+- [Warehouse Management Guide](https://docs.snowflake.com/en/user-guide/warehouses)
+- [Managed Tasks Documentation](https://docs.snowflake.com/en/user-guide/tasks-managed)
+- [Tag-Based Masking](https://docs.snowflake.com/en/user-guide/tag-based-masking)
+
+---
+
+## 📞 Support
+
+**Within the App**:
+- Check **Scheduled Tasks & Monitoring** → View History for error details
+- Review **Data Explorer** to verify data collection
+- Use "Show SQL" feature to preview changes
+
+**External**:
+- GitHub Issues: [Report a bug](https://github.com/animvin777/snowflake_config_rules/issues)
+- Documentation: See main [README](https://github.com/animvin777/snowflake_config_rules)
+
+---
+
+**Last Updated**: November 17, 2025  
+**App Version**: 2.3  
+**Recommended For**: All Snowflake accounts with 10+ warehouses or 100+ tables
+
+💡 **Pro Tip**: Start by applying default rules and monitoring for 1 week before making adjustments. Most organizations see immediate cost savings with zero operational impact.
