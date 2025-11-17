@@ -374,14 +374,15 @@ EXECUTE TASK data_schema.tag_monitor_task;
 CREATE STAGE IF NOT EXISTS core.streamlit_stage
   DIRECTORY = (ENABLE = TRUE);
 
-COPY FILES INTO @core.streamlit_stage/streamlit/ FROM @APP_SRC.stage/streamlit/;
+--COPY FILES INTO @core.streamlit_stage/streamlit/ FROM @APP_SRC.stage/streamlit/;
 
 
 -- Create Streamlit app
 -- Note: Query warehouse must be provided when launching the Streamlit app
 
 CREATE OR REPLACE STREAMLIT core.config_rules_app
-  FROM '@core.streamlit_stage/streamlit/'
+--  FROM '@core.streamlit_stage/streamlit/'
+  FROM '@APP_SRC.stage/streamlit/'
   QUERY_WAREHOUSE = 'CONFIG_RULES_VW'
   TITLE = 'Warehouse Monitor App'
   MAIN_FILE = 'app.py';

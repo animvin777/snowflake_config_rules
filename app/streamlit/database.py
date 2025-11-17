@@ -201,7 +201,7 @@ def get_table_retention_details(session):
 def get_all_tasks(session):
     """Retrieve all tasks in the application - includes consumer created tasks"""
     query = """
-    SHOW TASKS IN DATABASE SNOWFLAKE_CONFIG_RULES_APP
+    SHOW TASKS IN DATABASE;
     """
     return session.sql(query).to_pandas()
 

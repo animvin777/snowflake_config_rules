@@ -180,7 +180,7 @@ def render_details_tab(session):
     with st.expander("Tasks", expanded=False):
         try:
             query = """
-            SHOW TASKS IN DATABASE SNOWFLAKE_CONFIG_RULES_APP;
+            SHOW TASKS IN DATABASE;
             """
             df = session.sql(query).to_pandas()
             
