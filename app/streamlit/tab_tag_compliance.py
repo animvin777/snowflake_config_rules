@@ -4,7 +4,8 @@ Handles the display of tag compliance status for warehouses, databases, and tabl
 """
 
 import streamlit as st
-from database import get_applied_tag_rules, get_tag_compliance_details, get_all_objects_by_type
+import pandas as pd
+from database import get_applied_tag_rules, get_tag_compliance_details, get_all_objects_by_type, get_whitelisted_violations, add_to_whitelist
 from compliance import check_tag_compliance, generate_tag_fix_sql
 from ui_utils import render_refresh_button, render_section_header, render_filter_button
 
@@ -20,7 +21,7 @@ def render_tag_compliance_tab(session):
     with col_title:
         render_section_header("Tag Compliance", "tag-icon")
     with col_refresh:
-        if st.button("⟳", key="refresh_tab_tag_compliance", help="Refresh data"):
+        if st.button("↻", key="refresh_tab_tag_compliance", help="Refresh data", type="secondary"):
             st.rerun()
     st.markdown("---")
     
@@ -59,16 +60,25 @@ def render_tag_compliance_tab(session):
     # Get tag assignments for the selected object type
     tag_assignments_df = get_tag_compliance_details(session, object_type_filter)
     
+    # Get whitelist data
+    try:
+        whitelist_df = get_whitelisted_violations(session, object_type=object_type_filter)
+    except:
+        whitelist_df = pd.DataFrame()
+    
     # Check compliance
-    compliance_data = check_tag_compliance(all_objects_df, tag_assignments_df, object_tag_rules)
+    compliance_data = check_tag_compliance(all_objects_df, tag_assignments_df, object_tag_rules, whitelist_df)
     
     # Calculate summary statistics
     total_objects = len(compliance_data)
-    non_compliant_objects = sum(1 for obj in compliance_data if obj['violations'])
+    # Count non-compliant as objects with non-whitelisted violations
+    non_compliant_objects = sum(1 for obj in compliance_data if any(not v.get('is_whitelisted', False) for v in obj['violations']))
     compliant_objects = total_objects - non_compliant_objects
+    # Count whitelisted violations across all objects
+    whitelist_count = sum(sum(1 for v in obj['violations'] if v.get('is_whitelisted', False)) for obj in compliance_data)
     
     # Display summary metrics
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         render_filter_button("Total Objects", total_objects, "filter_all_tag_objects_btn", "All Objects", "tag_compliance_filter")
@@ -84,6 +94,9 @@ def render_tag_compliance_tab(session):
         compliance_rate = (compliant_objects / total_objects * 100) if total_objects > 0 else 0
         render_filter_button("Compliance Rate", f"{compliance_rate:.1f}%", "filter_rate_tag_objects_btn", "Non-Compliant First", "tag_compliance_filter")
     
+    with col5:
+        render_filter_button("Whitelisted", whitelist_count, "filter_whitelist_tag_objects_btn", "Whitelisted Only", "tag_compliance_filter")
+    
     st.html("<br>")
     st.markdown("---")
     
@@ -93,11 +106,16 @@ def render_tag_compliance_tab(session):
     
     # Sort if "Non-Compliant First" is selected
     if view_filter == "Non-Compliant First":
-        filtered_data = sorted(filtered_data, key=lambda x: (len(x['violations']) == 0, x['object_name']))
+        filtered_data = sorted(filtered_data, key=lambda x: (len([v for v in x['violations'] if not v.get('is_whitelisted', False)]) == 0, x['object_name']))
+    elif view_filter == "Whitelisted Only":
+        # Show only objects with whitelisted violations
+        filtered_data = [obj for obj in filtered_data if any(v.get('is_whitelisted', False) for v in obj['violations'])]
     elif view_filter == "Non-Compliant Only":
-        filtered_data = [obj for obj in filtered_data if obj['violations']]
+        # Show objects with non-whitelisted violations
+        filtered_data = [obj for obj in filtered_data if any(not v.get('is_whitelisted', False) for v in obj['violations'])]
     elif view_filter == "Compliant Only":
-        filtered_data = [obj for obj in filtered_data if not obj['violations']]
+        # Show objects with no violations at all
+        filtered_data = [obj for obj in filtered_data if not any(not v.get('is_whitelisted', False) for v in obj['violations'])]
     
     # Apply search filter
     if search_text:
@@ -126,11 +144,22 @@ def render_tag_compliance_tab(session):
     
     # Display objects
     for obj_comp in filtered_data:
-        # Determine if compliant
-        is_compliant = not obj_comp['violations']
+        # Separate whitelisted and non-whitelisted violations
+        all_violations = obj_comp['violations']
+        whitelisted_violations = [v for v in all_violations if v.get('is_whitelisted', False)]
+        non_whitelisted_violations = [v for v in all_violations if not v.get('is_whitelisted', False)]
+        
+        # Determine if compliant (based on non-whitelisted violations)
+        is_compliant = not non_whitelisted_violations
         
         object_name = obj_comp['object_name']
         object_type = obj_comp['object_type']
+        
+        # Determine which violations to show based on filter
+        if view_filter == "Whitelisted Only":
+            violations_to_show = whitelisted_violations
+        else:
+            violations_to_show = non_whitelisted_violations
         
         # Build object details
         object_details_parts = [f"<strong>Type:</strong> {object_type}"]
@@ -145,52 +174,96 @@ def render_tag_compliance_tab(session):
         card_class = f"{card_theme}-compact compliant" if is_compliant else f"{card_theme}-compact non-compliant"
         
         with st.container():
-            st.markdown(f"""
+            st.html(f"""
                 <div class="{card_class}">
                     <div class="warehouse-name">{object_name}</div>
                     <div class="warehouse-info">{object_details}</div>
                 </div>
-            """, unsafe_allow_html=True)
+            """)
             
             # Show assigned tags
             if obj_comp['assigned_tags']:
                 tags_html = " ".join([f'<span class="tag-badge">{tag}</span>' for tag in obj_comp['assigned_tags']])
-                st.markdown(f"""
+                st.html(f"""
                     <div class="tag-container">
                         <strong>Assigned Tags:</strong> {tags_html}
                     </div>
-                """, unsafe_allow_html=True)
+                """)
             else:
-                st.markdown(f"""
+                st.html(f"""
                     <div class="tag-container">
                         <em>No tags assigned</em>
                     </div>
-                """, unsafe_allow_html=True)
+                """)
             
             # Show violations if any
-            if obj_comp['violations']:
+            if violations_to_show:
                 # Show violations in compact format
                 col1, col2 = st.columns([3, 1])
                 
                 with col1:
-                    for violation in obj_comp['violations']:
-                        st.html(f"""
-                            <div class="violation-item">
-                                <div>
-                                    <div class="violation-rule-name">Missing Tag</div>
-                                    <div class="violation-details">
-                                        <div class="violation-value">
-                                            <span class="violation-label">Tag:</span>
-                                            <span class="violation-code">{violation['tag_name']}</span>
-                                        </div>
-                                        <div class="violation-value">
-                                            <span class="violation-label">-</span>
-                                            <span style="color: #757575; font-size: 0.85rem;">{violation['rule_description']}</span>
+                    for idx, violation in enumerate(violations_to_show):
+                        is_whitelisted = violation.get('is_whitelisted', False)
+                        
+                        # Create columns for violation and whitelist button
+                        vcol1, vcol2 = st.columns([5, 1])
+                        
+                        with vcol1:
+                            whitelisted_badge = '<span class="whitelisted-badge">Whitelisted</span>' if is_whitelisted else ''
+                            st.html(f"""
+                                <div class="violation-item">
+                                    <div>
+                                        <div class="violation-rule-name">Missing Tag {whitelisted_badge}</div>
+                                        <div class="violation-details">
+                                            <div class="violation-value">
+                                                <span class="violation-label">Tag:</span>
+                                                <span class="violation-code">{violation['tag_name']}</span>
+                                            </div>
+                                            <div class="violation-value">
+                                                <span class="violation-label">-</span>
+                                                <span style="color: #757575; font-size: 0.85rem;">{violation['rule_description']}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        """)
+                            """)
+                        
+                        with vcol2:
+                            # Add whitelist button only for non-whitelisted violations
+                            if not is_whitelisted:
+                                st.html('<div class="whitelist-button-wrapper">')
+                                if st.button("Whitelist", key=f"whitelist_tag_{object_name.replace('.', '_')}_{idx}", 
+                                           help="Whitelist this violation",
+                                           type="secondary"):
+                                    try:
+                                        # Extract database, schema, table names from obj_comp
+                                        db_name = obj_comp.get('object_database')
+                                        schema_name = obj_comp.get('object_schema')
+                                        table_name = None
+                                        
+                                        # For tables, extract table name from object_name
+                                        if object_type == 'TABLE' and '.' in object_name:
+                                            parts = object_name.split('.')
+                                            if len(parts) == 3:
+                                                table_name = parts[2]
+                                        
+                                        add_to_whitelist(
+                                            session,
+                                            rule_id='MISSING_TAG_VALUE',
+                                            applied_rule_id=violation.get('applied_tag_rule_id'),
+                                            object_type=object_type,
+                                            object_name=object_name,
+                                            database_name=db_name,
+                                            schema_name=schema_name,
+                                            table_name=table_name,
+                                            tag_name=violation['tag_name'],
+                                            reason=f"Whitelisted from UI"
+                                        )
+                                        st.success(f"Violation whitelisted for {object_name}")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Error whitelisting: {str(e)}")
+                                st.html('</div>')
                 
                 with col2:
                     # Create unique key for buttons

@@ -20,24 +20,24 @@ def load_css():
 
 def render_header():
     """Render the main application header"""
-    st.markdown("""
+    st.html("""
         <div class="main-header">
             <h1><span class="settings-icon"></span> Configuration Compliance Manager</h1>
             <p>Monitor and enforce configuration standards across your Snowflake environment</p>
         </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def render_footer():
     """Render the application footer"""
     st.markdown("---")
-    st.markdown("""
+    st.html("""
         <div class="footer">
             <p><strong>Snowflake Config Rules</strong></p>
             <p>Monitor and enforce configuration compliance across your Snowflake account</p>
             <p>Last refreshed: {}</p>
         </div>
-    """.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
+    """.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
 
 def render_refresh_button(key_suffix):
@@ -49,12 +49,12 @@ def render_refresh_button(key_suffix):
 def render_metric_card(value, label, card_type=""):
     """Render a metric card with optional styling"""
     card_class = f"metric-card {card_type}".strip()
-    st.markdown(f"""
+    st.html(f"""
         <div class="{card_class}">
             <h3>{value}</h3>
             <p>{label}</p>
         </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def render_filter_button(label, value, filter_key, filter_value, session_state_key):
@@ -186,7 +186,7 @@ def render_rule_card(rule, rule_type_class, rule_type_icon, violation_count=None
     """Render an applied rule card with consistent styling
     
     Args:
-        rule: Rule dictionary with RULE_NAME, THRESHOLD_VALUE, etc.
+        rule: Rule dictionary with RULE_NAME, THRESHOLD_VALUE, SCOPE, TAG_NAME, TAG_VALUE, etc.
         rule_type_class: CSS class ('warehouse' or 'database')
         rule_type_icon: HTML for icon
         violation_count: Optional number of violations for this rule
@@ -199,15 +199,30 @@ def render_rule_card(rule, rule_type_class, rule_type_icon, violation_count=None
         else:
             violation_html = '<span class="compliant-count"><span class="check-icon"></span> All compliant</span>'
     
-    st.markdown(f"""
+    # Build scope display
+    scope = rule.get('SCOPE', 'ALL')
+    tag_name = rule.get('TAG_NAME')
+    tag_value = rule.get('TAG_VALUE')
+    
+    if scope == 'TAG_BASED' and tag_name:
+        if tag_value:
+            scope_html = f'<span class="rule-scope-label tag-based">Tag: {tag_name}={tag_value}</span>'
+        else:
+            scope_html = f'<span class="rule-scope-label tag-based">Tag: {tag_name}</span>'
+    else:
+        scope_html = '<span class="rule-scope-label all-objects">All Objects</span>'
+    
+    st.html(f"""
         <div class="rule-card {rule_type_class}">
             <h4 style="margin-top:0;">
                 {rule_type_icon} {rule['RULE_NAME']}
                 <span class="rule-type-label {rule_type_class}">{rule['RULE_TYPE']}</span>
+                {scope_html}
                 {violation_html}
             </h4>
             <p style="margin-bottom:0.5rem;"><strong>Threshold:</strong> {int(rule['THRESHOLD_VALUE'])} {rule['UNIT']} | <strong>Applied:</strong> {rule['APPLIED_AT'].strftime('%Y-%m-%d %H:%M')}</p>
         </div>
-    """, unsafe_allow_html=True)
+    """)
+
 
 

@@ -14,7 +14,7 @@ def render_details_tab(session):
     with col_title:
         render_section_header("Application Data Inspector", "chart-icon")
     with col_refresh:
-        if st.button("⟳", key="refresh_tab_details", help="Refresh data"):
+        if st.button("↻", key="refresh_tab_details", help="Refresh data", type="secondary"):
             st.rerun()
     st.markdown("---")
     
@@ -154,7 +154,29 @@ def render_details_tab(session):
         except Exception as e:
             st.error(f"Error loading tag compliance details: {str(e)}")
     
-    # Table 7: Tasks Information
+    # Table 7: Rule Whitelist
+    with st.expander("Rule Whitelist", expanded=False):
+        try:
+            query = """
+            SELECT 
+                rw.whitelist_id, rw.rule_id, rw.applied_rule_id, rw.object_type, 
+                rw.object_name, rw.database_name, rw.schema_name, rw.table_name,
+                cr.rule_name, rw.reason, rw.whitelisted_by, rw.whitelisted_at, rw.is_active
+            FROM data_schema.rule_whitelist rw
+            LEFT JOIN data_schema.config_rules cr ON rw.rule_id = cr.rule_id
+            ORDER BY rw.whitelisted_at DESC
+            """
+            df = session.sql(query).to_pandas()
+            
+            if not df.empty:
+                st.markdown(f"**Total Records:** {len(df)}")
+                st.dataframe(df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No whitelisted violations yet.")
+        except Exception as e:
+            st.error(f"Error loading rule whitelist: {str(e)}")
+    
+    # Table 8: Tasks Information
     with st.expander("Tasks", expanded=False):
         try:
             query = """
@@ -187,7 +209,7 @@ def render_details_tab(session):
     st.markdown("---")
     render_section_header("Summary Statistics", "chart-icon")
     
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     
     with col1:
         render_count_metric(session, "SELECT COUNT(*) as cnt FROM data_schema.warehouse_details", "Warehouse Records")
@@ -203,4 +225,7 @@ def render_details_tab(session):
     
     with col5:
         render_count_metric(session, "SELECT COUNT(*) as cnt FROM data_schema.applied_tag_rules WHERE is_active = TRUE", "Applied Tag Rules")
+    
+    with col6:
+        render_count_metric(session, "SELECT COUNT(*) as cnt FROM data_schema.rule_whitelist WHERE is_active = TRUE", "Whitelisted Violations")
 

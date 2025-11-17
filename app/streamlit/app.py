@@ -15,6 +15,7 @@ from tab_task_management import render_task_management_tab
 from tab_database_compliance import render_database_compliance_tab
 from tab_details import render_details_tab
 from tab_query_data import render_query_data_tab
+from tab_whitelist import render_whitelist_tab
 
 # Get the active Snowflake session
 session = get_active_session()
@@ -22,7 +23,7 @@ session = get_active_session()
 # Set page configuration
 st.set_page_config(
     page_title="Snowflake Config Rules",
-    page_icon="⚙️",
+    page_icon="⚙",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -34,11 +35,12 @@ load_css()
 render_header()
 
 # Create tabs with user-friendly names
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "Configure Rules", 
     "Tag Compliance",
     "Warehouse Compliance", 
     "Database Compliance",
+    "Whitelist Management",
     "Schedule & Tasks",
     "Query Data",
     "App Data Inspector"
@@ -58,12 +60,15 @@ with tab4:
     render_database_compliance_tab(session)
 
 with tab5:
-    render_task_management_tab(session)
+    render_whitelist_tab(session)
 
 with tab6:
-    render_query_data_tab(session)
+    render_task_management_tab(session)
 
 with tab7:
+    render_query_data_tab(session)
+
+with tab8:
     render_details_tab(session)
 
 # Render footer

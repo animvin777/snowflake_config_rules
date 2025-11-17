@@ -5,7 +5,8 @@ Displays warehouse compliance status against applied rules
 
 import streamlit as st
 import pandas as pd
-from database import get_applied_rules, get_warehouse_details, execute_sql, get_wh_statement_timeout_default
+from database import (get_applied_rules, get_warehouse_details, execute_sql, get_wh_statement_timeout_default, 
+                      get_tag_compliance_details, get_whitelisted_violations, add_to_whitelist)
 from compliance import check_wh_compliance, generate_wh_fix_sql, generate_wh_post_fix_update_sql
 from ui_utils import render_refresh_button, render_section_header, render_filter_button, filter_by_search
 
@@ -25,7 +26,7 @@ def render_wh_compliance_view_tab(session):
     with col_title:
         render_section_header("Warehouse Compliance", "wh-icon")
     with col_refresh:
-        if st.button("⟳", key="refresh_tab2", help="Refresh data"):
+        if st.button("↻", key="refresh_tab2", help="Refresh data", type="secondary"):
             st.rerun()
     st.markdown("---")
     
@@ -39,16 +40,31 @@ def render_wh_compliance_view_tab(session):
         if warehouse_df.empty:
             st.warning("No warehouse data available. The monitoring task may not have run yet.")
         else:
-            compliance_data = check_wh_compliance(warehouse_df, applied_rules_df)
+            # Get tag data for warehouses
+            try:
+                tag_df = get_tag_compliance_details(session, object_type='WAREHOUSE')
+            except:
+                tag_df = pd.DataFrame()
+            
+            # Get whitelist data
+            try:
+                whitelist_df = get_whitelisted_violations(session, object_type='WAREHOUSE')
+            except:
+                whitelist_df = pd.DataFrame()
+            
+            compliance_data = check_wh_compliance(warehouse_df, applied_rules_df, tag_df, whitelist_df)
             
             # Summary metrics
             total_warehouses = len(compliance_data)
-            non_compliant_warehouses = len([wh for wh in compliance_data if wh['violations']])
+            # Count non-compliant as warehouses with non-whitelisted violations
+            non_compliant_warehouses = sum(1 for wh in compliance_data if any(not v.get('is_whitelisted', False) for v in wh['violations']))
             compliant_warehouses = total_warehouses - non_compliant_warehouses
             compliance_rate = (compliant_warehouses / total_warehouses * 100) if total_warehouses > 0 else 0
+            # Count whitelisted violations across all warehouses
+            whitelist_count = sum(sum(1 for v in wh['violations'] if v.get('is_whitelisted', False)) for wh in compliance_data)
             
             # Metrics as clickable styled buttons
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3, col4, col5 = st.columns(5)
             
             with col1:
                 render_filter_button("Total Warehouses", total_warehouses, "filter_all_btn", "All Warehouses", "wh_compliance_filter")
@@ -61,6 +77,9 @@ def render_wh_compliance_view_tab(session):
             
             with col4:
                 render_filter_button("Compliance Rate", f"{compliance_rate:.1f}%", "filter_rate_btn", "Non-Compliant First", "wh_compliance_filter")
+            
+            with col5:
+                render_filter_button("Whitelisted", whitelist_count, "filter_whitelist_btn", "Whitelisted Only", "wh_compliance_filter")
             
             st.html("<br>")
             
@@ -82,20 +101,29 @@ def _render_tile_view(session, compliance_data, view_filter, search_term=""):
         compliance_data = sorted(compliance_data, key=lambda x: (len(x['violations']) == 0, x['warehouse_name']))
     
     for wh_comp in compliance_data:
-        has_violations = len(wh_comp['violations']) > 0
+        # Separate whitelisted and non-whitelisted violations
+        all_violations = wh_comp['violations']
+        whitelisted_violations = [v for v in all_violations if v.get('is_whitelisted', False)]
+        non_whitelisted_violations = [v for v in all_violations if not v.get('is_whitelisted', False)]
+        
+        has_violations = len(non_whitelisted_violations) > 0
         warehouse_name = wh_comp['warehouse_name']
         
         # Apply search filter
         if search_term:
             search_lower = search_term.lower()
             # Search in warehouse name and rule names
-            rule_names = [v['rule_name'].lower() for v in wh_comp['violations']]
+            rule_names = [v['rule_name'].lower() for v in all_violations]
             if (search_lower not in warehouse_name.lower() and 
                 not any(search_lower in rule for rule in rule_names)):
                 continue
         
-        # Apply status filter (skip for "Non-Compliant First" which shows all)
-        if view_filter == "Non-Compliant Only" and not has_violations:
+        # Apply status filter
+        if view_filter == "Whitelisted Only":
+            # Show only warehouses with whitelisted violations
+            if not whitelisted_violations:
+                continue
+        elif view_filter == "Non-Compliant Only" and not has_violations:
             continue
         elif view_filter == "Compliant Only" and has_violations:
             continue
@@ -110,7 +138,7 @@ def _render_tile_view(session, compliance_data, view_filter, search_term=""):
                     <div class="warehouse-compact compliant">
                         <div class="warehouse-name">{warehouse_name}</div>
                         <div class="warehouse-info" style="color: #2E7D32; font-weight: 500;">
-                            ✓ Configuration Updated
+                            ✔ Configuration Updated
                         </div>
                     </div>
                 """)
@@ -119,7 +147,7 @@ def _render_tile_view(session, compliance_data, view_filter, search_term=""):
                     <div class="warehouse-compact non-compliant">
                         <div class="warehouse-name">{warehouse_name}</div>
                         <div class="warehouse-info" style="color: #C62828;">
-                            ✗ Fix Failed: {fix_status['error']}
+                            ✖ Fix Failed: {fix_status['error']}
                         </div>
                     </div>
                 """)
@@ -127,11 +155,17 @@ def _render_tile_view(session, compliance_data, view_filter, search_term=""):
             st.html("<br>")
             continue
         
+        # Determine which violations to show based on filter
+        if view_filter == "Whitelisted Only":
+            violations_to_show = whitelisted_violations
+        else:
+            violations_to_show = non_whitelisted_violations
+        
         # Display warehouse card - compact version
         card_class = "warehouse-compact non-compliant" if has_violations else "warehouse-compact compliant"
         
         with st.container():
-            st.markdown(f"""
+            st.html(f"""
                 <div class="{card_class}">
                     <div class="warehouse-name">{warehouse_name}</div>
                     <div class="warehouse-info">
@@ -140,40 +174,69 @@ def _render_tile_view(session, compliance_data, view_filter, search_term=""):
                         <strong>Owner:</strong> {wh_comp['warehouse_owner']}
                     </div>
                 </div>
-            """, unsafe_allow_html=True)
+            """)
             
-            if has_violations:
+            if violations_to_show:
                 # Show violations in compact format
                 col1, col2 = st.columns([3, 1])
                 
                 with col1:
-                    for violation in wh_comp['violations']:
+                    for idx, violation in enumerate(violations_to_show):
                         current_val = violation['current_value'] if violation['current_value'] is not None else "Not Set"
-                        st.html(f"""
-                            <div class="violation-item">
-                                <div>
-                                    <div class="violation-rule-name">{violation['rule_name']}</div>
-                                    <div class="violation-details">
-                                        <div class="violation-value">
-                                            <span class="violation-label">Current:</span>
-                                            <span class="violation-code">{current_val}</span>
-                                        </div>
-                                        <div class="violation-value">
-                                            <span class="violation-operator">{violation['operator']}</span>
-                                        </div>
-                                        <div class="violation-value">
-                                            <span class="violation-label">Required:</span>
-                                            <span class="violation-code">{int(violation['threshold_value'])} {violation['unit']}</span>
+                        is_whitelisted = violation.get('is_whitelisted', False)
+                        
+                        # Create columns for violation and whitelist button
+                        vcol1, vcol2 = st.columns([5, 1])
+                        
+                        with vcol1:
+                            whitelisted_badge = '<span class="whitelisted-badge">Whitelisted</span>' if is_whitelisted else ''
+                            st.html(f"""
+                                <div class="violation-item">
+                                    <div>
+                                        <div class="violation-rule-name">{violation['rule_name']} {whitelisted_badge}</div>
+                                        <div class="violation-details">
+                                            <div class="violation-value">
+                                                <span class="violation-label">Current:</span>
+                                                <span class="violation-code">{current_val}</span>
+                                            </div>
+                                            <div class="violation-value">
+                                                <span class="violation-operator">{violation['operator']}</span>
+                                            </div>
+                                            <div class="violation-value">
+                                                <span class="violation-label">Required:</span>
+                                                <span class="violation-code">{int(violation['threshold_value'])} {violation['unit']}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        """)
+                            """)
+                        
+                        with vcol2:
+                            # Add whitelist button only for non-whitelisted violations
+                            if not is_whitelisted:
+                                st.html('<div class="whitelist-button-wrapper">')
+                                if st.button("Whitelist", key=f"whitelist_{warehouse_name}_{idx}", 
+                                           help="Whitelist this violation",
+                                           type="secondary"):
+                                    try:
+                                        add_to_whitelist(
+                                            session,
+                                            rule_id=violation['rule_id'],
+                                            applied_rule_id=violation.get('applied_rule_id'),
+                                            object_type='WAREHOUSE',
+                                            object_name=warehouse_name,
+                                            reason=f"Whitelisted from UI"
+                                        )
+                                        st.success(f"Violation whitelisted for {warehouse_name}")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Error whitelisting: {str(e)}")
+                                st.html('</div>')
                 
                 with col2:
-                    # Check if any violation has fix_button or fix_sql enabled
-                    has_any_fix_button = any(v.get('has_fix_button', False) for v in wh_comp['violations'])
-                    has_any_fix_sql = any(v.get('has_fix_sql', False) for v in wh_comp['violations'])
+                    # Check if any violation has fix_button or fix_sql enabled (only for non-whitelisted)
+                    has_any_fix_button = any(v.get('has_fix_button', False) for v in violations_to_show if not v.get('is_whitelisted', False))
+                    has_any_fix_sql = any(v.get('has_fix_sql', False) for v in violations_to_show if not v.get('is_whitelisted', False))
                     
                     if has_any_fix_button or has_any_fix_sql:
                         if has_any_fix_button:
@@ -181,8 +244,8 @@ def _render_tile_view(session, compliance_data, view_filter, search_term=""):
                                 # Execute the fix SQL
                                 try:
                                     # Step 1: Run the fix SQL
-                                    for violation in wh_comp['violations']:
-                                        if violation.get('has_fix_button', False):
+                                    for violation in violations_to_show:
+                                        if violation.get('has_fix_button', False) and not violation.get('is_whitelisted', False):
                                             sql = generate_wh_fix_sql(
                                                 warehouse_name,
                                                 violation['parameter'],
@@ -234,5 +297,21 @@ def _render_tile_view(session, compliance_data, view_filter, search_term=""):
                                 if st.button("Hide SQL", key=f"btn_hide_sql_{warehouse_name}"):
                                     st.session_state[f'show_sql_{warehouse_name}'] = False
                                     st.rerun()
+            
+            # Show compliant rules if there are any
+            if wh_comp.get('compliant_rules'):
+                compliant_rules = wh_comp['compliant_rules']
+                rule_badges = ''.join([
+                    f'<span class="compliant-rule-badge">{rule["rule_name"]}</span>'
+                    for rule in compliant_rules
+                ])
+                st.html(f"""
+                    <div class="compliant-rules-section">
+                        <div class="compliant-rules-header">Compliant with {len(compliant_rules)} rule(s)</div>
+                        <div class="compliant-rules-list">
+                            {rule_badges}
+                        </div>
+                    </div>
+                """)
             
             st.html("<br>")

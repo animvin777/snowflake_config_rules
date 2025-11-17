@@ -7,8 +7,8 @@ import streamlit as st
 import pandas as pd
 from database import (get_config_rules, get_applied_rules, apply_rule, deactivate_applied_rule, 
                       get_warehouse_details, get_database_retention_details, get_wh_statement_timeout_default,
-                      get_available_tags, get_applied_tag_rules, apply_tag_rule, deactivate_tag_rule,
-                      get_tag_compliance_details, get_all_objects_by_type)
+                      get_available_tag_names,get_available_tags, get_applied_tag_rules, apply_tag_rule, deactivate_tag_rule,
+                      get_tag_compliance_details, get_all_objects_by_type, get_whitelisted_violations)
 from compliance import check_wh_compliance, generate_wh_fix_sql, check_table_compliance, generate_table_fix_sql, check_tag_compliance, generate_tag_fix_sql
 from ui_utils import render_refresh_button, render_section_header, render_rule_card
 
@@ -20,7 +20,7 @@ def render_rule_configuration_tab(session):
     with col_title:
         render_section_header("Rule Configuration", "settings-icon")
     with col_refresh:
-        if st.button("⟳", key="refresh_tab1", help="Refresh data"):
+        if st.button("↻", key="refresh_tab1", help="Refresh data", type="secondary"):
             st.rerun()
     st.markdown("---")
     
@@ -54,10 +54,10 @@ def render_rule_configuration_tab(session):
                             default_val = rule.get('DEFAULT_THRESHOLD', 'N/A')
                             st.markdown(f"**Default:** `{default_val}`")
                         st.markdown(f"**Description:** {rule['RULE_DESCRIPTION']}")
-                        st.caption('<span class="db-icon"></span> **Type:** Database', unsafe_allow_html=True)
+                        st.html('<span class="db-icon"></span> **Type:** Database')
                         override_allowed = rule.get('ALLOW_THRESHOLD_OVERRIDE', True)
                         if not override_allowed:
-                            st.caption('<span class="warning-icon"></span> Threshold cannot be changed for this rule', unsafe_allow_html=True)
+                            st.html('<span class="warning-icon"></span> Threshold cannot be changed for this rule')
             else:
                 st.info("No database rules available")
         
@@ -77,10 +77,10 @@ def render_rule_configuration_tab(session):
                             default_val = rule.get('DEFAULT_THRESHOLD', 'N/A')
                             st.markdown(f"**Default:** `{default_val}`")
                         st.markdown(f"**Description:** {rule['RULE_DESCRIPTION']}")
-                        st.caption('<span class="wh-icon"></span> **Type:** Warehouse', unsafe_allow_html=True)
+                        st.html('<span class="wh-icon"></span> **Type:** Warehouse')
                         override_allowed = rule.get('ALLOW_THRESHOLD_OVERRIDE', True)
                         if not override_allowed:
-                            st.caption('<span class="warning-icon"></span> Threshold cannot be changed for this rule', unsafe_allow_html=True)
+                            st.html('<span class="warning-icon"></span> Threshold cannot be changed for this rule')
             else:
                 st.info("No warehouse rules available")
         
@@ -133,7 +133,7 @@ def render_rule_configuration_tab(session):
                             default_threshold = rule.get('DEFAULT_THRESHOLD')
                             if default_threshold is not None and not pd.isna(default_threshold):
                                 try:
-                                    apply_rule(session, rule['RULE_ID'], default_threshold)
+                                    apply_rule(session, rule['RULE_ID'], default_threshold, scope='ALL')
                                     success_count += 1
                                 except Exception as e:
                                     st.warning(f"Could not apply {rule['RULE_NAME']}: {str(e)}")
@@ -178,12 +178,60 @@ def render_rule_configuration_tab(session):
                     rule_info = rules_df[rules_df['RULE_ID'] == selected_rule].iloc[0]
                     st.info(f"**{rule_info['RULE_NAME']}**: {rule_info['RULE_DESCRIPTION']}")
                     
+                    # Add scope selection
+                    st.markdown("##### Rule Scope")
+                    scope = st.radio(
+                        "Apply this rule to:",
+                        ["All Objects", "Objects with Specific Tag"],
+                        horizontal=True,
+                        key="rule_scope_selector",
+                        help="Choose whether this rule applies to all objects or only objects with a specific tag"
+                    )
+                    
+                    # Tag selection (only if TAG_BASED scope)
+                    tag_name = None
+                    tag_value = None
+                    if scope == "Objects with Specific Tag":
+                        try:
+                            available_tags_df = get_available_tag_names(session)
+                            if not available_tags_df.empty:
+                                col_tag1, col_tag2 = st.columns([1, 1])
+                                with col_tag1:
+                                    tag_name = st.selectbox(
+                                        "Tag Name",
+                                        available_tags_df['TAG_NAME'].tolist(),
+                                        key="tag_name_selector",
+                                        help="Select the tag that objects must have for this rule to apply"
+                                    )
+                                with col_tag2:
+                                    tag_value = st.text_input(
+                                        "Tag Value (optional)",
+                                        key="tag_value_input",
+                                        help="Optionally specify a tag value. Leave blank to apply to any value of this tag.",
+                                        placeholder="e.g., Production"
+                                    )
+                                    if tag_value == "":
+                                        tag_value = None
+                            else:
+                                st.warning("No tags available in the account. Create tags first to use tag-based rules.")
+                        except Exception as e:
+                            st.error(f"Error loading tags: {str(e)}")
+                    
+                    # Convert scope to internal format
+                    scope_internal = 'ALL' if scope == "All Objects" else 'TAG_BASED'
+                    
                     col1, col2, col3 = st.columns([1, 1, 2])
                     with col1:
                         if st.button("Apply Rule", type="primary", use_container_width=True):
                             try:
-                                apply_rule(session, selected_rule, threshold_value)
-                                st.success(f"Rule '{rule_info['RULE_NAME']}' applied with threshold: {threshold_value} {rule_info['UNIT']}")
+                                apply_rule(session, selected_rule, threshold_value, scope_internal, tag_name, tag_value)
+                                
+                                # Generate success message based on scope
+                                if scope_internal == 'TAG_BASED':
+                                    tag_desc = f"Tag: {tag_name}={tag_value}" if tag_value else f"Tag: {tag_name}"
+                                    st.success(f"Rule '{rule_info['RULE_NAME']}' applied with threshold: {threshold_value} {rule_info['UNIT']} [{tag_desc}]")
+                                else:
+                                    st.success(f"Rule '{rule_info['RULE_NAME']}' applied with threshold: {threshold_value} {rule_info['UNIT']} [All Objects]")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error applying rule: {str(e)}")
@@ -192,7 +240,7 @@ def render_rule_configuration_tab(session):
             st.markdown("**Configure Tag Compliance Rule**")
             st.info("Tag rules check whether required tags are present on objects. Select a tag and object type to enforce tag compliance.")
             
-            # Get available tags
+            # Get available tag names
             try:
                 available_tags_df = get_available_tags(session)
                 if available_tags_df.empty:
@@ -243,6 +291,10 @@ def render_rule_configuration_tab(session):
     st.markdown("#### Currently Applied Rules")
     applied_rules_df = get_applied_rules(session)
     applied_tag_rules_df = get_applied_tag_rules(session)
+    try:
+        tag_df = get_tag_compliance_details(session)
+    except:
+        tag_df = pd.DataFrame()
     
     # Create tabs for different rule types
     if not applied_rules_df.empty or not applied_tag_rules_df.empty:
@@ -255,18 +307,19 @@ def render_rule_configuration_tab(session):
             if not db_rules.empty:
                 # Get compliance data once for all database rules
                 retention_df = get_database_retention_details(session)
+                whitelist_df = get_whitelisted_violations(session)
                 
                 for _, rule in db_rules.iterrows():
                     rule_type_class = "database"
                     rule_type_icon = '<span class="db-icon"></span>'
                     
-                    # Calculate violation count for this rule
+                    # Calculate violation count for this specific applied rule
                     violation_count = 0
                     if not retention_df.empty:
-                        compliance_data = check_table_compliance(retention_df, applied_rules_df[applied_rules_df['RULE_ID'] == rule['RULE_ID']])
+                        compliance_data = check_table_compliance(retention_df, applied_rules_df[applied_rules_df['APPLIED_RULE_ID'] == rule['APPLIED_RULE_ID']],tag_df, whitelist_df)
                         for obj_comp in compliance_data:
                             for violation in obj_comp['violations']:
-                                if violation['rule_id'] == rule['RULE_ID']:
+                                if violation.get('applied_rule_id') == rule['APPLIED_RULE_ID'] and not violation.get('is_whitelisted', False):
                                     violation_count += 1
                     
                     # Render the rule card using utility function with violation count
@@ -298,14 +351,14 @@ def render_rule_configuration_tab(session):
                     
                     # Show SQL if button was clicked
                     if st.session_state.get(f'show_sql_{rule["APPLIED_RULE_ID"]}', False):
-                        # Generate SQL for database/schema/table rules
+                        # Generate SQL for database/schema/table rules - only for this specific applied rule
                         retention_df = get_database_retention_details(session)
-                        compliance_data = check_table_compliance(retention_df, applied_rules_df[applied_rules_df['RULE_ID'] == rule['RULE_ID']])
+                        compliance_data = check_table_compliance(retention_df, applied_rules_df[applied_rules_df['APPLIED_RULE_ID'] == rule['APPLIED_RULE_ID']], tag_df, whitelist_df)
                         
                         sql_statements = []
                         for obj_comp in compliance_data:
                             for violation in obj_comp['violations']:
-                                if violation['rule_id'] == rule['RULE_ID']:
+                                if violation.get('applied_rule_id') == rule['APPLIED_RULE_ID'] and not violation.get('is_whitelisted', False):
                                     sql = generate_table_fix_sql(
                                         obj_comp['database_name'],
                                         obj_comp.get('schema_name'),
@@ -333,18 +386,20 @@ def render_rule_configuration_tab(session):
             if not wh_rules.empty:
                 # Get compliance data once for all warehouse rules
                 warehouse_df = get_warehouse_details(session)
+                whitelist_df = get_whitelisted_violations(session)
                 
                 for _, rule in wh_rules.iterrows():
                     rule_type_class = "warehouse"
                     rule_type_icon = '<span class="wh-icon"></span>'
                     
-                    # Calculate violation count for this rule
+                    # Calculate violation count for this specific applied rule
                     violation_count = 0
                     if not warehouse_df.empty:
-                        compliance_data = check_wh_compliance(warehouse_df, applied_rules_df[applied_rules_df['RULE_ID'] == rule['RULE_ID']])
+                        # Pass only this specific applied rule to get violations for this rule instance
+                        compliance_data = check_wh_compliance(warehouse_df, applied_rules_df[applied_rules_df['APPLIED_RULE_ID'] == rule['APPLIED_RULE_ID']],tag_df, whitelist_df)
                         for wh_comp in compliance_data:
                             for violation in wh_comp['violations']:
-                                if violation['rule_id'] == rule['RULE_ID']:
+                                if violation.get('applied_rule_id') == rule['APPLIED_RULE_ID'] and not violation.get('is_whitelisted', False):
                                     violation_count += 1
                     
                     # Render the rule card using utility function with violation count
@@ -376,18 +431,18 @@ def render_rule_configuration_tab(session):
                     
                     # Show SQL if button was clicked
                     if st.session_state.get(f'show_sql_{rule["APPLIED_RULE_ID"]}', False):
-                        # Generate SQL for warehouse rules
+                        # Generate SQL for warehouse rules - only for this specific applied rule
                         warehouse_df = get_warehouse_details(session)
-                        compliance_data = check_wh_compliance(warehouse_df, applied_rules_df[applied_rules_df['RULE_ID'] == rule['RULE_ID']])
+                        compliance_data = check_wh_compliance(warehouse_df, applied_rules_df[applied_rules_df['APPLIED_RULE_ID'] == rule['APPLIED_RULE_ID']], tag_df, whitelist_df)
                         
                         sql_statements = []
                         for wh_comp in compliance_data:
                             for violation in wh_comp['violations']:
-                                if violation['rule_id'] == rule['RULE_ID']:
+                                if violation.get('applied_rule_id') == rule['APPLIED_RULE_ID'] and not violation.get('is_whitelisted', False):
                                     sql = generate_wh_fix_sql(
                                         wh_comp['warehouse_name'],
                                         violation['parameter'],
-                                        violation['threshold_value'] if violation['rule_id'] != 'ZERO_STATEMENT_TIMEOUT' else st.session_state.wh_default_timeout
+                                        violation['threshold_value'] if violation['threshold_value'] != violation['current_value'] else st.session_state.wh_default_timeout
                                     )
                                     sql_statements.append(sql)
                         
@@ -410,13 +465,20 @@ def render_rule_configuration_tab(session):
                     try:
                         all_objects_df = get_all_objects_by_type(session, tag_rule['OBJECT_TYPE'])
                         tag_assignments_df = get_tag_compliance_details(session, tag_rule['OBJECT_TYPE'])
+                        whitelist_df = get_whitelisted_violations(session, object_type=tag_rule['OBJECT_TYPE'])
                         single_rule_df = applied_tag_rules_df[applied_tag_rules_df['APPLIED_TAG_RULE_ID'] == tag_rule['APPLIED_TAG_RULE_ID']]
-                        compliance_data = check_tag_compliance(all_objects_df, tag_assignments_df, single_rule_df)
+                        compliance_data = check_tag_compliance(all_objects_df, tag_assignments_df, single_rule_df, whitelist_df)
                         
                         for obj_comp in compliance_data:
                             if obj_comp['violations']:
-                                violation_count += len(obj_comp['violations'])
-                    except Exception:
+                                # Only count non-whitelisted violations for THIS specific tag rule
+                                for violation in obj_comp['violations']:
+                                    if (not violation.get('is_whitelisted', False) and 
+                                        violation.get('applied_tag_rule_id') == tag_rule['APPLIED_TAG_RULE_ID']):
+                                        violation_count += 1
+                    except Exception as e:
+                        # Log the error for debugging
+                        st.warning(f"Error calculating violations for tag rule: {str(e)}")
                         violation_count = 0
                     
                     # Build violation count display
@@ -427,7 +489,7 @@ def render_rule_configuration_tab(session):
                         violation_html = '<span class="compliant-count"><span class="check-icon"></span> All compliant</span>'
                     
                     # Display tag rule card
-                    st.markdown(f"""
+                    st.html(f"""
                         <div class="rule-card tag">
                             <h4 style="margin-top:0;">
                                 <span class="tag-icon"></span> Tag: {tag_rule['TAG_NAME']}
@@ -440,7 +502,7 @@ def render_rule_configuration_tab(session):
                                 <strong>Applied By:</strong> {tag_rule.get('APPLIED_BY', 'N/A')}
                             </p>
                         </div>
-                    """, unsafe_allow_html=True)
+                    """)
                     
                     col1, col2, col3 = st.columns([3, 1, 1])
                     
@@ -462,21 +524,24 @@ def render_rule_configuration_tab(session):
                         # Get all objects of the specified type
                         all_objects_df = get_all_objects_by_type(session, tag_rule['OBJECT_TYPE'])
                         tag_assignments_df = get_tag_compliance_details(session, tag_rule['OBJECT_TYPE'])
+                        whitelist_df = get_whitelisted_violations(session, object_type=tag_rule['OBJECT_TYPE'])
                         
                         # Check compliance for this specific tag rule
                         single_rule_df = applied_tag_rules_df[applied_tag_rules_df['APPLIED_TAG_RULE_ID'] == tag_rule['APPLIED_TAG_RULE_ID']]
-                        compliance_data = check_tag_compliance(all_objects_df, tag_assignments_df, single_rule_df)
+                        compliance_data = check_tag_compliance(all_objects_df, tag_assignments_df, single_rule_df, whitelist_df)
                         
                         sql_statements = []
                         for obj_comp in compliance_data:
                             if obj_comp['violations']:
                                 for violation in obj_comp['violations']:
-                                    sql = generate_tag_fix_sql(
-                                        obj_comp['object_name'],
-                                        obj_comp['object_type'],
-                                        violation['tag_name']
-                                    )
-                                    sql_statements.append(sql)
+                                    # Skip whitelisted violations
+                                    if not violation.get('is_whitelisted', False):
+                                        sql = generate_tag_fix_sql(
+                                            obj_comp['object_name'],
+                                            obj_comp['object_type'],
+                                            violation['tag_name']
+                                        )
+                                        sql_statements.append(sql)
                         
                         if sql_statements:
                             combined_sql = "\n\n".join(sql_statements)

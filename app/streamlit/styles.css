@@ -510,6 +510,113 @@
     border: 1px solid rgba(76, 175, 80, 0.25);
 }
 
+/* Rule Scope Labels */
+.rule-scope-label {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    margin-left: 8px;
+}
+
+.rule-scope-label.all-objects {
+    background: rgba(96, 125, 139, 0.12);
+    color: #455A64;
+    border: 1px solid rgba(96, 125, 139, 0.25);
+}
+
+.rule-scope-label.tag-based {
+    background: rgba(255, 152, 0, 0.15);
+    color: #E65100;
+    border: 1px solid rgba(255, 152, 0, 0.3);
+    font-family: 'Courier New', monospace;
+    font-size: 0.68rem;
+}
+
+
+/* Whitelist Button Styles */
+.whitelist-btn {
+    background: rgba(156, 39, 176, 0.1);
+    color: #7B1FA2;
+    border: 1px solid rgba(156, 39, 176, 0.3);
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.whitelist-btn:hover {
+    background: rgba(156, 39, 176, 0.2);
+    border-color: rgba(156, 39, 176, 0.5);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(156, 39, 176, 0.2);
+}
+
+/* Target whitelist buttons within the wrapper class */
+.whitelist-button-wrapper button,
+.whitelist-button-wrapper .stButton > button {
+    min-width: 70px !important;
+    max-width: 90px !important;
+    padding: 0.35rem 0.5rem !important;
+    background: rgba(156, 39, 176, 0.08) !important;
+    color: #7B1FA2 !important;
+    border: 1px solid rgba(156, 39, 176, 0.25) !important;
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+    line-height: 1.2 !important;
+    transition: all 0.2s ease !important;
+}
+
+.whitelist-button-wrapper button:hover,
+.whitelist-button-wrapper .stButton > button:hover {
+    background: rgba(156, 39, 176, 0.15) !important;
+    border-color: rgba(156, 39, 176, 0.4) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 6px rgba(156, 39, 176, 0.2) !important;
+}
+
+/* Remove Selected from Whitelist Button - Make it prominent */
+button[key="remove_selected_btn"],
+button[data-testid="baseButton-primary"][kind="primary"] {
+    font-weight: 600 !important;
+    padding: 0.5rem 1rem !important;
+}
+button[data-testid="baseButton-secondary"]:contains("Refresh") {
+    min-width: 80px !important;
+}
+
+/* Whitelisted Badge */
+.whitelisted-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    margin-left: 8px;
+    background: rgba(156, 39, 176, 0.12);
+    color: #7B1FA2;
+    border: 1px solid rgba(156, 39, 176, 0.25);
+}
+
+/* Schema Card Styles */
+.schema-card {
+    background: linear-gradient(135deg, rgba(103, 58, 183, 0.05) 0%, rgba(103, 58, 183, 0.02) 100%);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border-left: 4px solid #673AB7;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    transition: all 0.2s ease;
+}
+
+.schema-card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.12);
+    transform: translateX(2px);
+}
 
 /* Warehouse Detail Box Styles - Adaptive */
 .warehouse-detail-box {
@@ -742,6 +849,54 @@
     margin: 0.5rem 0;
     padding: 0.4rem 0;
     font-size: 0.85rem;
+}
+
+/* Compliant Rules Display */
+.compliant-rules-section {
+    padding: 0.6rem 0.8rem;
+    margin: 0.5rem 0;
+    background: rgba(76, 175, 80, 0.04);
+    border-radius: 5px;
+    border-left: 3px solid #4CAF50;
+}
+
+[data-theme="dark"] .compliant-rules-section {
+    background: rgba(76, 175, 80, 0.08);
+}
+
+.compliant-rules-header {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #2E7D32;
+    margin-bottom: 0.4rem;
+}
+
+[data-theme="dark"] .compliant-rules-header {
+    color: #81C784;
+}
+
+.compliant-rules-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.3rem;
+}
+
+.compliant-rule-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    background: rgba(76, 175, 80, 0.1);
+    color: #2E7D32;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid rgba(76, 175, 80, 0.25);
+}
+
+[data-theme="dark"] .compliant-rule-badge {
+    background: rgba(76, 175, 80, 0.15);
+    color: #81C784;
+    border-color: rgba(129, 199, 132, 0.3);
 }
 
 /* Tab Styles - Full Width & Better Visibility */

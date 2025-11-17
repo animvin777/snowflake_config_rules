@@ -17,7 +17,7 @@ def render_task_management_tab(session):
     with col_title:
         render_section_header("Schedule & Task Management", "schedule-icon")
     with col_refresh:
-        if st.button("⟳", key="refresh_tab_tasks", help="Refresh data"):
+        if st.button("↻", key="refresh_tab_tasks", help="Refresh data", type="secondary"):
             st.rerun()
     st.markdown("---")
     

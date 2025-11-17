@@ -24,10 +24,11 @@ def get_config_rules(session):
 
 
 def get_applied_rules(session):
-    """Retrieve all applied rules with their threshold values"""
+    """Retrieve all applied rules with their threshold values and tag scope"""
     query = """
     SELECT ar.applied_rule_id, ar.rule_id, cr.rule_name, ar.threshold_value,
            cr.rule_type, cr.check_parameter, cr.comparison_operator, cr.unit,
+           ar.scope, ar.tag_name, ar.tag_value,
            ar.applied_at, ar.is_active, cr.has_fix_button, cr.has_fix_sql
     FROM data_schema.applied_rules ar
     JOIN data_schema.config_rules cr ON ar.rule_id = cr.rule_id
@@ -35,6 +36,28 @@ def get_applied_rules(session):
     ORDER BY ar.applied_at DESC
     """
     return session.sql(query).to_pandas()
+
+
+def generate_rule_display_name(rule_name, scope, tag_name=None, tag_value=None):
+    """Generate a descriptive rule name based on scope and tag criteria
+    
+    Args:
+        rule_name: Base rule name
+        scope: 'ALL' or 'TAG_BASED'
+        tag_name: Tag name (if TAG_BASED)
+        tag_value: Tag value (if TAG_BASED)
+    
+    Returns:
+        str: Formatted rule name with scope information
+    """
+    if scope == 'TAG_BASED' and tag_name:
+        if tag_value:
+            return f"{rule_name} [Tag: {tag_name}={tag_value}]"
+        else:
+            return f"{rule_name} [Tag: {tag_name}]"
+    else:
+        return f"{rule_name} [All Objects]"
+
 
 def get_wh_statement_timeout_default(session):
     """Retrieve the default statement timeout value for warehouses to fix 0 value set"""
@@ -46,6 +69,7 @@ def get_wh_statement_timeout_default(session):
     SELECT cr.default_threshold as threshold_value
     FROM data_schema.config_rules cr
     where cr.rule_id = 'MAX_STATEMENT_TIMEOUT'
+    order by threshold_value desc
     LIMIT 1
     """
     result = session.sql(query).to_pandas()
@@ -70,22 +94,65 @@ def get_warehouse_details(session):
     return session.sql(query).to_pandas()
 
 
-def apply_rule(session, rule_id, threshold_value):
-    """Apply a configuration rule with a threshold value"""
-    # Deactivate any existing active rule for this rule_id
+def apply_rule(session, rule_id, threshold_value, scope='ALL', tag_name=None, tag_value=None):
+    """Apply a configuration rule with a threshold value and optional tag-based scope
+    
+    Args:
+        session: Snowflake session
+        rule_id: ID of the rule to apply
+        threshold_value: Threshold value for the rule
+        scope: 'ALL' for all objects, or 'TAG_BASED' for specific tagged objects
+        tag_name: Tag name for tag-based rules (required if scope='TAG_BASED')
+        tag_value: Tag value for tag-based rules (required if scope='TAG_BASED')
+    """
+    # Validate tag-based rules
+    if scope == 'TAG_BASED' and (not tag_name or tag_value is None):
+        raise ValueError("tag_name and tag_value are required for TAG_BASED scope")
+    
+    # Set NULL for tag fields if scope is ALL
+    tag_name_val = f"'{tag_name}'" if scope == 'TAG_BASED' and tag_name else 'NULL'
+    tag_value_val = f"'{tag_value}'" if scope == 'TAG_BASED' and tag_value is not None else 'NULL'
+    
+    # Deactivate any existing active rule with same scope and tag criteria
     deactivate_query = f"""
     UPDATE data_schema.applied_rules 
     SET is_active = FALSE 
-    WHERE rule_id = '{rule_id}' AND is_active = TRUE
+    WHERE rule_id = '{rule_id}' 
+      AND scope = '{scope}'
+      AND COALESCE(tag_name, '') = COALESCE({tag_name_val}, '')
+      AND COALESCE(tag_value, '') = COALESCE({tag_value_val}, '')
+      AND is_active = TRUE
     """
     execute_sql(session, deactivate_query)
     
     # Insert new applied rule
     insert_query = f"""
-    INSERT INTO data_schema.applied_rules (rule_id, threshold_value, applied_by)
-    VALUES ('{rule_id}', {threshold_value}, CURRENT_USER())
+    INSERT INTO data_schema.applied_rules 
+        (rule_id, threshold_value, scope, tag_name, tag_value, applied_by)
+    VALUES 
+        ('{rule_id}', {threshold_value}, '{scope}', {tag_name_val}, {tag_value_val}, CURRENT_USER())
     """
     execute_sql(session, insert_query)
+
+
+def get_available_tag_names(session):
+    """Get list of available tags in the account
+    
+    Returns:
+        DataFrame with tag names from SNOWFLAKE.ACCOUNT_USAGE.TAGS
+    """
+    query = """
+    SELECT DISTINCT tag_name
+    FROM SNOWFLAKE.ACCOUNT_USAGE.TAGS
+    WHERE deleted IS NULL
+    ORDER BY tag_name
+    """
+    try:
+        return session.sql(query).to_pandas()
+    except Exception as e:
+        # Return empty dataframe if account usage not accessible
+        import pandas as pd
+        return pd.DataFrame(columns=['TAG_NAME'])
 
 
 def deactivate_applied_rule(session, applied_rule_id):
@@ -390,3 +457,162 @@ def get_all_objects_by_type(session, object_type):
         return pd.DataFrame()
     
     return session.sql(query).to_pandas()
+
+
+# ===================================
+# WHITELIST FUNCTIONS
+# ===================================
+
+def add_to_whitelist(session, rule_id, applied_rule_id, object_type, object_name, 
+                     database_name=None, schema_name=None, table_name=None, tag_name=None, reason=None):
+    """Add a violation to the whitelist
+    
+    Args:
+        session: Snowflake session
+        rule_id: ID of the rule being whitelisted
+        applied_rule_id: ID of the applied rule instance
+        object_type: Type of object ('WAREHOUSE', 'DATABASE', 'SCHEMA', 'TABLE')
+        object_name: Fully qualified name of the object
+        database_name: Database name (for database objects)
+        schema_name: Schema name (for schema/table objects)
+        table_name: Table name (for table objects)
+        tag_name: Tag name (for tag compliance violations)
+        reason: Optional reason for whitelisting
+    """
+    # Escape single quotes in strings
+    object_name_escaped = object_name.replace("'", "''") if object_name else ''
+    reason_escaped = reason.replace("'", "''") if reason else None
+    tag_name_escaped = tag_name.replace("'", "''") if tag_name else None
+    
+    # Build values for optional fields
+    db_val = f"'{database_name}'" if database_name else 'NULL'
+    schema_val = f"'{schema_name}'" if schema_name else 'NULL'
+    table_val = f"'{table_name}'" if table_name else 'NULL'
+    tag_val = f"'{tag_name_escaped}'" if tag_name_escaped else 'NULL'
+    reason_val = f"'{reason_escaped}'" if reason_escaped else 'NULL'
+    applied_rule_val = f"{applied_rule_id}" if applied_rule_id else 'NULL'
+    
+    # Check if already whitelisted - for tag violations, also check tag_name
+    tag_check = f"AND COALESCE(tag_name, '') = COALESCE({tag_val}, '')" if rule_id == 'MISSING_TAG_VALUE' else ""
+    
+    check_query = f"""
+    SELECT COUNT(*) as count
+    FROM data_schema.rule_whitelist
+    WHERE rule_id = '{rule_id}'
+      AND object_type = '{object_type}'
+      AND object_name = '{object_name_escaped}'
+      {tag_check}
+      AND is_active = TRUE
+    """
+    result = session.sql(check_query).to_pandas()
+    
+    if result.iloc[0]['COUNT'] > 0:
+        raise ValueError(f"This violation is already whitelisted")
+    
+    # Insert whitelist entry
+    insert_query = f"""
+    INSERT INTO data_schema.rule_whitelist 
+        (rule_id, applied_rule_id, object_type, object_name, database_name, schema_name, table_name, tag_name, reason, whitelisted_by)
+    VALUES 
+        ('{rule_id}', {applied_rule_val}, '{object_type}', '{object_name_escaped}', {db_val}, {schema_val}, {table_val}, {tag_val}, {reason_val}, CURRENT_USER())
+    """
+    execute_sql(session, insert_query)
+
+
+def remove_from_whitelist(session, whitelist_id):
+    """Remove a violation from the whitelist
+    
+    Args:
+        session: Snowflake session
+        whitelist_id: ID of the whitelist entry to remove
+    """
+    query = f"""
+    UPDATE data_schema.rule_whitelist
+    SET is_active = FALSE
+    WHERE whitelist_id = {whitelist_id}
+    """
+    execute_sql(session, query)
+
+
+def bulk_remove_from_whitelist(session, whitelist_ids):
+    """Remove multiple violations from the whitelist
+    
+    Args:
+        session: Snowflake session
+        whitelist_ids: List of whitelist IDs to remove
+    """
+    if not whitelist_ids:
+        return
+    
+    ids_str = ','.join(str(id) for id in whitelist_ids)
+    query = f"""
+    UPDATE data_schema.rule_whitelist
+    SET is_active = FALSE
+    WHERE whitelist_id IN ({ids_str})
+    """
+    execute_sql(session, query)
+
+
+def get_whitelisted_violations(session, rule_id=None, object_type=None):
+    """Get all whitelisted violations
+    
+    Args:
+        session: Snowflake session
+        rule_id: Optional filter by rule ID
+        object_type: Optional filter by object type
+    
+    Returns:
+        DataFrame with whitelist entries
+    """
+    rule_filter = f"AND wl.rule_id = '{rule_id}'" if rule_id else ""
+    type_filter = f"AND wl.object_type = '{object_type}'" if object_type else ""
+    
+    query = f"""
+    SELECT 
+        wl.whitelist_id,
+        wl.rule_id,
+        cr.rule_name,
+        cr.rule_type,
+        wl.applied_rule_id,
+        wl.object_type,
+        wl.object_name,
+        wl.database_name,
+        wl.schema_name,
+        wl.table_name,
+        wl.tag_name,
+        wl.reason,
+        wl.whitelisted_by,
+        wl.whitelisted_at,
+        wl.is_active
+    FROM data_schema.rule_whitelist wl
+    LEFT JOIN data_schema.config_rules cr ON wl.rule_id = cr.rule_id
+    WHERE wl.is_active = TRUE
+    {rule_filter}
+    {type_filter}
+    ORDER BY wl.whitelisted_at DESC
+    """
+    return session.sql(query).to_pandas()
+
+
+def is_violation_whitelisted(session, rule_id, object_name):
+    """Check if a specific violation is whitelisted
+    
+    Args:
+        session: Snowflake session
+        rule_id: ID of the rule
+        object_name: Name of the object
+    
+    Returns:
+        bool: True if whitelisted, False otherwise
+    """
+    object_name_escaped = object_name.replace("'", "''") if object_name else ''
+    
+    query = f"""
+    SELECT COUNT(*) as count
+    FROM data_schema.rule_whitelist
+    WHERE rule_id = '{rule_id}'
+      AND object_name = '{object_name_escaped}'
+      AND is_active = TRUE
+    """
+    result = session.sql(query).to_pandas()
+    return result.iloc[0]['COUNT'] > 0

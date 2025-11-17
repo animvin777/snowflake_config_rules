@@ -75,10 +75,15 @@ CREATE TABLE IF NOT EXISTS data_schema.applied_rules (
     applied_rule_id NUMBER AUTOINCREMENT PRIMARY KEY,
     rule_id VARCHAR(100) NOT NULL,
     threshold_value NUMBER NOT NULL,
+    scope VARCHAR(50) DEFAULT 'ALL' NOT NULL,  -- 'ALL' or 'TAG_BASED'
+    tag_name VARCHAR(255),  -- Tag name for tag-based rules
+    tag_value VARCHAR(16777216),  -- Tag value for tag-based rules
     applied_at TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
     applied_by VARCHAR(255),
     is_active BOOLEAN DEFAULT TRUE,
-    FOREIGN KEY (rule_id) REFERENCES data_schema.config_rules(rule_id)
+    FOREIGN KEY (rule_id) REFERENCES data_schema.config_rules(rule_id),
+    -- Ensure no duplicate rules with same scope and tag criteria
+    CONSTRAINT unique_rule_scope UNIQUE (rule_id, scope, tag_name, tag_value, is_active)
 );
 
 
@@ -91,6 +96,27 @@ CREATE TABLE IF NOT EXISTS data_schema.applied_tag_rules (
     applied_by VARCHAR(255),
     is_active BOOLEAN DEFAULT TRUE,
     UNIQUE (tag_name, object_type, is_active)
+);
+
+
+-- Create table to store rule violation whitelists
+CREATE TABLE IF NOT EXISTS data_schema.rule_whitelist (
+    whitelist_id NUMBER AUTOINCREMENT PRIMARY KEY,
+    rule_id VARCHAR(100) NOT NULL,
+    applied_rule_id NUMBER,  -- Link to specific applied rule instance
+    object_type VARCHAR(50) NOT NULL,  -- 'WAREHOUSE', 'DATABASE', 'SCHEMA', 'TABLE'
+    object_name VARCHAR(16777216) NOT NULL,  -- Fully qualified name for the object
+    database_name VARCHAR(255),  -- For database objects
+    schema_name VARCHAR(255),  -- For schema/table objects
+    table_name VARCHAR(255),  -- For table objects
+    tag_name VARCHAR(255) DEFAULT '',  -- For tag compliance violations - which tag is missing
+    reason VARCHAR(16777216),  -- Optional reason for whitelisting
+    whitelisted_by VARCHAR(255),
+    whitelisted_at TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+    is_active BOOLEAN DEFAULT TRUE,
+    -- Ensure no duplicate whitelists for same object and rule
+    -- For tag violations, tag_name must also match to allow multiple tag violations per object
+    CONSTRAINT unique_whitelist UNIQUE (rule_id, object_type, object_name, tag_name, is_active)
 );
 
 
@@ -380,3 +406,4 @@ GRANT SELECT ON VIEW data_schema.warehouse_monitor_view TO APPLICATION ROLE conf
 GRANT ALL ON TABLE data_schema.config_rules TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.applied_rules TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.applied_tag_rules TO APPLICATION ROLE config_rules_admin;
+GRANT ALL ON TABLE data_schema.rule_whitelist TO APPLICATION ROLE config_rules_admin;

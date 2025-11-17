@@ -15,7 +15,7 @@ def render_query_data_tab(session):
     with col_title:
         render_section_header("Query Data", "chart-icon")
     with col_refresh:
-        if st.button("⟳", key="refresh_tab_query", help="Refresh data"):
+        if st.button("↻", key="refresh_tab_query", help="Refresh data", type="secondary"):
             st.rerun()
     st.markdown("---")
     
