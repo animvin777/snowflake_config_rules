@@ -374,7 +374,7 @@ EXECUTE TASK data_schema.tag_monitor_task;
 CREATE STAGE IF NOT EXISTS core.streamlit_stage
   DIRECTORY = (ENABLE = TRUE);
 
-COPY FILES INTO @core.streamlit_stage/streamlit/ FROM @SNOWFLAKE_CONFIG_RULES_PKG.APP_SRC.STAGE/streamlit/;
+COPY FILES INTO @core.streamlit_stage/streamlit/ FROM @APP_SRC.stage/streamlit/;
 
 
 -- Create Streamlit app

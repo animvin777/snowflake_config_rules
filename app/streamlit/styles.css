@@ -1039,9 +1039,11 @@ button[data-testid="baseButton-secondary"]:contains("Refresh") {
     border-color: #2196F3;
 }
 
-/* ========================================
-   BUTTON COLOR VARIATIONS
-   ======================================== */
+/* 
+========================================
+BUTTON COLOR VARIATIONS
+======================================== 
+*/
 
 /* Green - Success/Compliant */
 .stButton > button[key="filter_compliant_btn"],
