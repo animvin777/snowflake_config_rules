@@ -45,7 +45,7 @@ Due to Snowflake Native App security restrictions, you need to create an additio
 
 ```sql
 USE ROLE ACCOUNTADMIN;
-USE DATABASE SNOWFLAKE_CONFIG_RULES_APP;  -- Use your app's database name
+USE APPLICATION <APPLICATION_NAME>;  -- Use your app's database name
 
 -- Create serverless task to capture warehouse parameters
 CREATE OR REPLACE TASK data_schema.warehouse_params_monitor_task
@@ -86,7 +86,7 @@ END;
 
 -- Activate and grant permissions
 ALTER TASK data_schema.warehouse_params_monitor_task RESUME;
-GRANT ALL ON TASK data_schema.warehouse_params_monitor_task TO APPLICATION SNOWFLAKE_CONFIG_RULES_APP;
+GRANT ALL ON TASK data_schema.warehouse_params_monitor_task TO APPLICATION <APPLICATION_NAME>;
 
 -- Execute tasks to populate initial data
 EXECUTE TASK data_schema.warehouse_monitor_task;

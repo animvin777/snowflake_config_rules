@@ -86,13 +86,20 @@ def check_wh_compliance(warehouse_df, applied_rules_df, tag_df, whitelist_df):
             'warehouse_size': wh['SIZE'],
             'warehouse_owner': wh['OWNER'],
             'violations': [],
-            'compliant_rules': []
+            'compliant_rules': [],
+            'applicable_rules': []
         }
         
         for _, rule in wh_rules.iterrows():
             # Check if this rule applies to this warehouse based on scope and tags
             if not check_rule_applies_to_object(rule, wh_tags):
                 continue
+            
+            # Track that this rule applies to this warehouse
+            wh_compliance['applicable_rules'].append({
+                'rule_id': rule['RULE_ID'],
+                'rule_name': rule['RULE_NAME']
+            })
             
             param = rule['CHECK_PARAMETER']
             threshold = rule['THRESHOLD_VALUE']
@@ -242,7 +249,8 @@ def check_table_compliance(table_df, applied_rules_df, tag_df, whitelist_df):
             'table_type': obj.get('TABLE_TYPE'),
             'table_owner': obj['OWNER'],
             'violations': [],
-            'compliant_rules': []
+            'compliant_rules': [],
+            'applicable_rules': []
         }
         
         for _, rule in db_rules.iterrows():
@@ -259,6 +267,12 @@ def check_table_compliance(table_df, applied_rules_df, tag_df, whitelist_df):
             # Check if this rule applies to this object based on scope and tags
             if not check_rule_applies_to_object(rule, obj_tags):
                 continue
+            
+            # Track that this rule applies to this object
+            obj_compliance['applicable_rules'].append({
+                'rule_id': rule['RULE_ID'],
+                'rule_name': rule['RULE_NAME']
+            })
             
             param = rule['CHECK_PARAMETER']
             threshold = rule['THRESHOLD_VALUE']

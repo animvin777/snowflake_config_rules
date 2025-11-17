@@ -155,11 +155,6 @@ SELECT 'MAX_DATABASE_RETENTION_TIME', 'Max Database Retention Time in Days', 'Ma
 WHERE NOT EXISTS (SELECT 1 FROM data_schema.config_rules WHERE rule_id = 'MAX_DATABASE_RETENTION_TIME');
 
 
--- Create view for easier data access
-CREATE OR REPLACE VIEW data_schema.warehouse_monitor_view AS
-SELECT * FROM data_schema.warehouse_details
-ORDER BY name,capture_timestamp DESC;
-
 -- CREATE WAREHOUSE TO BE USED BY STREAMLIT ONLY
 CREATE WAREHOUSE IF NOT EXISTS CONFIG_RULES_VW
   WAREHOUSE_SIZE = 'XSMALL'
@@ -403,7 +398,6 @@ GRANT ALL ON WAREHOUSE CONFIG_RULES_VW TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.warehouse_details TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.database_retention_details TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.tag_compliance_details TO APPLICATION ROLE config_rules_admin;
-GRANT SELECT ON VIEW data_schema.warehouse_monitor_view TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.config_rules TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.applied_rules TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.applied_tag_rules TO APPLICATION ROLE config_rules_admin;

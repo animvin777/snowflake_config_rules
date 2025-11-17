@@ -161,6 +161,29 @@ def _render_tile_view(session, compliance_data, view_filter, search_term=""):
         else:
             violations_to_show = non_whitelisted_violations
         
+        # Count violations and compliant rules
+        violation_count = len(non_whitelisted_violations)
+        whitelisted_count_obj = len(whitelisted_violations)
+        
+        # Get all applicable rules for this warehouse (considering tags)
+        applicable_rules_count = len(wh_comp.get('applicable_rules', []))
+        compliant_rules_count = applicable_rules_count - (violation_count + whitelisted_count_obj)
+        
+        # Build counts display
+        counts_parts = []
+        if applicable_rules_count == 0:
+            # No rules applicable to this warehouse
+            counts_html = '<span class="count-badge count-no-rules">No rules applicable</span>'
+        else:
+            if violation_count > 0:
+                counts_parts.append(f'<span class="count-badge count-violations">{violation_count} Violation{"s" if violation_count != 1 else ""}</span>')
+            if whitelisted_count_obj > 0:
+                counts_parts.append(f'<span class="count-badge count-whitelisted">{whitelisted_count_obj} Whitelisted</span>')
+            if compliant_rules_count > 0:
+                counts_parts.append(f'<span class="count-badge count-compliant">{compliant_rules_count} Compliant</span>')
+            
+            counts_html = " ".join(counts_parts) if counts_parts else '<span class="count-badge count-compliant">All Rules Compliant</span>'
+        
         # Display warehouse card - compact version
         card_class = "warehouse-compact non-compliant" if has_violations else "warehouse-compact compliant"
         
@@ -173,6 +196,7 @@ def _render_tile_view(session, compliance_data, view_filter, search_term=""):
                         <strong>Size:</strong> {wh_comp['warehouse_size']} | 
                         <strong>Owner:</strong> {wh_comp['warehouse_owner']}
                     </div>
+                    <div class="counts-container" style="margin-top: 6px;">{counts_html}</div>
                 </div>
             """)
             

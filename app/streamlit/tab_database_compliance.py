@@ -162,6 +162,29 @@ def render_database_compliance_tab(session):
             object_name = f"{obj_comp['database_name']}.{obj_comp['schema_name']}.{obj_comp['table_name']}"
             object_details = f"<strong>Type:</strong> {obj_comp.get('table_type', 'TABLE')} | <strong>Owner:</strong> {obj_comp['table_owner']}"
         
+        # Count violations and compliant rules
+        violation_count = len(non_whitelisted_violations)
+        whitelisted_count_obj = len(whitelisted_violations)
+        
+        # Get all applicable rules for this object (considering tags and object type)
+        applicable_rules_count = len(obj_comp.get('applicable_rules', []))
+        compliant_rules_count = applicable_rules_count - (violation_count + whitelisted_count_obj)
+        
+        # Build counts display
+        counts_parts = []
+        if applicable_rules_count == 0:
+            # No rules applicable to this object
+            counts_html = '<span class="count-badge count-no-rules">No rules applicable</span>'
+        else:
+            if violation_count > 0:
+                counts_parts.append(f'<span class="count-badge count-violations">{violation_count} Violation{"s" if violation_count != 1 else ""}</span>')
+            if whitelisted_count_obj > 0:
+                counts_parts.append(f'<span class="count-badge count-whitelisted">{whitelisted_count_obj} Whitelisted</span>')
+            if compliant_rules_count > 0:
+                counts_parts.append(f'<span class="count-badge count-compliant">{compliant_rules_count} Compliant</span>')
+            
+            counts_html = " ".join(counts_parts) if counts_parts else '<span class="count-badge count-compliant">All Rules Compliant</span>'
+        
         # Determine which violations to show based on filter
         if view_filter == "Whitelisted Only":
             if not whitelisted_violations:
@@ -178,6 +201,7 @@ def render_database_compliance_tab(session):
                 <div class="{card_class}">
                     <div class="warehouse-name">{object_name}</div>
                     <div class="warehouse-info">{object_details}</div>
+                    <div class="counts-container" style="margin-top: 6px;">{counts_html}</div>
                 </div>
             """)
             
