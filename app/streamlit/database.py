@@ -4,8 +4,18 @@ Handles all Snowflake database queries and operations
 """
 
 import pandas as pd
-import streamlit as st
 import json
+from compliance import check_wh_compliance, check_table_compliance, check_tag_compliance
+
+def parse_json_field(field_value):
+    if not field_value:
+        return []
+    if isinstance(field_value, str):
+        return json.loads(field_value)
+    elif isinstance(field_value, list):
+        return field_value
+    else:
+        return []
 
 def execute_sql(session, sql):
     """Execute a SQL statement"""
@@ -620,132 +630,111 @@ def is_violation_whitelisted(session, rule_id, object_name):
 
 
 def save_wh_compliance_results(session, compliance_data):
-    """Save warehouse compliance results to the database
+    """Save warehouse compliance results to the database using bulk insert
     
     Args:
         session: Snowflake session
         compliance_data: List of dictionaries with compliance information
     """
     
-    # Truncate existing data
-    session.sql("TRUNCATE TABLE data_schema.warehouse_compliance_results").collect()
+    if not compliance_data:
+        return
     
-    # Prepare data for insertion
+    # Prepare data for bulk insertion using DataFrame
+    rows = []
     for wh_comp in compliance_data:
-        warehouse_name = wh_comp['warehouse_name'].replace("'", "''")
-        warehouse_type = wh_comp.get('warehouse_type', '').replace("'", "''") if wh_comp.get('warehouse_type') else ''
-        warehouse_size = wh_comp.get('warehouse_size', '').replace("'", "''") if wh_comp.get('warehouse_size') else ''
-        warehouse_owner = wh_comp.get('warehouse_owner', '').replace("'", "''") if wh_comp.get('warehouse_owner') else ''
-        
-        # Properly escape JSON strings by replacing single quotes with double single quotes
-        violations_json = json.dumps(wh_comp.get('violations', [])).replace("'", "''")
-        compliant_rules_json = json.dumps(wh_comp.get('compliant_rules', [])).replace("'", "''")
-        applicable_rules_json = json.dumps(wh_comp.get('applicable_rules', [])).replace("'", "''")
-        
-        insert_query = f"""
-        INSERT INTO data_schema.warehouse_compliance_results (
-            warehouse_name, warehouse_type, warehouse_size, warehouse_owner,
-            violations, compliant_rules, applicable_rules, last_evaluated_at
-        )
-        SELECT 
-            '{warehouse_name}',
-            '{warehouse_type}',
-            '{warehouse_size}',
-            '{warehouse_owner}',
-            PARSE_JSON('{violations_json}'),
-            PARSE_JSON('{compliant_rules_json}'),
-            PARSE_JSON('{applicable_rules_json}'),
-            CURRENT_TIMESTAMP()
-        """
-        session.sql(insert_query).collect()
+        rows.append({
+            'WAREHOUSE_NAME': wh_comp['warehouse_name'],
+            'WAREHOUSE_TYPE': wh_comp.get('warehouse_type', ''),
+            'WAREHOUSE_SIZE': wh_comp.get('warehouse_size', ''),
+            'WAREHOUSE_OWNER': wh_comp.get('warehouse_owner', ''),
+            'VIOLATIONS': json.dumps(wh_comp.get('violations', [])),
+            'COMPLIANT_RULES': json.dumps(wh_comp.get('compliant_rules', [])),
+            'APPLICABLE_RULES': json.dumps(wh_comp.get('applicable_rules', []))
+        })
+    
+    # Create DataFrame and write to Snowflake
+    df = pd.DataFrame(rows)
+    session.write_pandas(
+        df,
+        table_name='WAREHOUSE_COMPLIANCE_RESULTS',
+        schema='DATA_SCHEMA',
+        auto_create_table=False,
+        overwrite=True
+    )
 
 
 def save_db_compliance_results(session, compliance_data):
-    """Save database/schema/table compliance results to the database
+    """Save database/schema/table compliance results to the database using bulk insert
     
     Args:
         session: Snowflake session
         compliance_data: List of dictionaries with compliance information
     """
     
-    # Truncate existing data
-    session.sql("TRUNCATE TABLE data_schema.database_compliance_results").collect()
+    if not compliance_data:
+        return
     
-    # Prepare data for insertion
+    # Prepare data for bulk insertion using DataFrame
+    rows = []
     for obj_comp in compliance_data:
-        object_type = obj_comp.get('object_type', '').replace("'", "''") if obj_comp.get('object_type') else ''
-        database_name = obj_comp.get('database_name', '').replace("'", "''") if obj_comp.get('database_name') else ''
-        schema_name = obj_comp.get('schema_name', '').replace("'", "''") if obj_comp.get('schema_name') else ''
-        table_name = obj_comp.get('table_name', '').replace("'", "''") if obj_comp.get('table_name') else ''
-        table_type = obj_comp.get('table_type', '').replace("'", "''") if obj_comp.get('table_type') else ''
-        table_owner = obj_comp.get('table_owner', '').replace("'", "''") if obj_comp.get('table_owner') else ''
-        
-        # Properly escape JSON strings by replacing single quotes with double single quotes
-        violations_json = json.dumps(obj_comp.get('violations', [])).replace("'", "''")
-        compliant_rules_json = json.dumps(obj_comp.get('compliant_rules', [])).replace("'", "''")
-        applicable_rules_json = json.dumps(obj_comp.get('applicable_rules', [])).replace("'", "''")
-        
-        insert_query = f"""
-        INSERT INTO data_schema.database_compliance_results (
-            object_type, database_name, schema_name, table_name, table_type, table_owner,
-            violations, compliant_rules, applicable_rules, last_evaluated_at
-        )
-        SELECT 
-            '{object_type}',
-            NULLIF('{database_name}', ''),
-            NULLIF('{schema_name}', ''),
-            NULLIF('{table_name}', ''),
-            NULLIF('{table_type}', ''),
-            '{table_owner}',
-            PARSE_JSON('{violations_json}'),
-            PARSE_JSON('{compliant_rules_json}'),
-            PARSE_JSON('{applicable_rules_json}'),
-            CURRENT_TIMESTAMP()
-        """
-        session.sql(insert_query).collect()
+        rows.append({
+            'OBJECT_TYPE': obj_comp.get('object_type', ''),
+            'DATABASE_NAME': obj_comp.get('database_name') if obj_comp.get('database_name') else None,
+            'SCHEMA_NAME': obj_comp.get('schema_name') if obj_comp.get('schema_name') else None,
+            'TABLE_NAME': obj_comp.get('table_name') if obj_comp.get('table_name') else None,
+            'TABLE_TYPE': obj_comp.get('table_type') if obj_comp.get('table_type') else None,
+            'TABLE_OWNER': obj_comp.get('table_owner', ''),
+            'VIOLATIONS': json.dumps(obj_comp.get('violations', [])),
+            'COMPLIANT_RULES': json.dumps(obj_comp.get('compliant_rules', [])),
+            'APPLICABLE_RULES': json.dumps(obj_comp.get('applicable_rules', []))
+        })
+    
+    # Create DataFrame and write to Snowflake
+    df = pd.DataFrame(rows)
+    session.write_pandas(
+        df,
+        table_name='DATABASE_COMPLIANCE_RESULTS',
+        schema='DATA_SCHEMA',
+        auto_create_table=False,
+        overwrite=True
+    )
 
 
 def save_tag_compliance_results(session, compliance_data):
-    """Save tag compliance results to the database
+    """Save tag compliance results to the database using bulk insert
     
     Args:
         session: Snowflake session
         compliance_data: List of dictionaries with compliance information
     """
     
-    # Truncate existing data
-    session.sql("TRUNCATE TABLE data_schema.tag_compliance_results").collect()
+    if not compliance_data:
+        return
     
-    # Prepare data for insertion
+    # Prepare data for bulk insertion using DataFrame
+    rows = []
     for obj_comp in compliance_data:
-        object_name = obj_comp['object_name'].replace("'", "''")
-        object_database = obj_comp.get('object_database', '').replace("'", "''") if obj_comp.get('object_database') else ''
-        object_schema = obj_comp.get('object_schema', '').replace("'", "''") if obj_comp.get('object_schema') else ''
-        object_type = obj_comp.get('object_type', '').replace("'", "''") if obj_comp.get('object_type') else ''
-        table_type = obj_comp.get('table_type', '').replace("'", "''") if obj_comp.get('table_type') else ''
-        owner = obj_comp.get('owner', '').replace("'", "''") if obj_comp.get('owner') else ''
-        
-        # Properly escape JSON strings by replacing single quotes with double single quotes
-        assigned_tags_json = json.dumps(obj_comp.get('assigned_tags', [])).replace("'", "''")
-        violations_json = json.dumps(obj_comp.get('violations', [])).replace("'", "''")
-        
-        insert_query = f"""
-        INSERT INTO data_schema.tag_compliance_results (
-            object_name, object_database, object_schema, object_type, table_type, owner,
-            assigned_tags, violations, last_evaluated_at
-        )
-        SELECT 
-            '{object_name}',
-            NULLIF('{object_database}', ''),
-            NULLIF('{object_schema}', ''),
-            '{object_type}',
-            NULLIF('{table_type}', ''),
-            '{owner}',
-            PARSE_JSON('{assigned_tags_json}'),
-            PARSE_JSON('{violations_json}'),
-            CURRENT_TIMESTAMP()
-        """
-        session.sql(insert_query).collect()
+        rows.append({
+            'OBJECT_NAME': obj_comp['object_name'],
+            'OBJECT_DATABASE': obj_comp.get('object_database') if obj_comp.get('object_database') else None,
+            'OBJECT_SCHEMA': obj_comp.get('object_schema') if obj_comp.get('object_schema') else None,
+            'OBJECT_TYPE': obj_comp.get('object_type', ''),
+            'TABLE_TYPE': obj_comp.get('table_type') if obj_comp.get('table_type') else None,
+            'OWNER': obj_comp.get('owner', ''),
+            'ASSIGNED_TAGS': json.dumps(obj_comp.get('assigned_tags', [])),
+            'VIOLATIONS': json.dumps(obj_comp.get('violations', []))
+        })
+    
+    # Create DataFrame and write to Snowflake
+    df = pd.DataFrame(rows)
+    session.write_pandas(
+        df,
+        table_name='TAG_COMPLIANCE_RESULTS',
+        schema='DATA_SCHEMA',
+        auto_create_table=False,
+        overwrite=True
+    )
 
 
 def get_wh_compliance_results(session):
@@ -773,10 +762,9 @@ def get_wh_compliance_results(session):
     # Convert to list of dictionaries matching the original format
     compliance_data = []
     for _, row in df.iterrows():
-        # Parse JSON strings back to Python objects
-        violations = json.loads(row['VIOLATIONS']) if row['VIOLATIONS'] and isinstance(row['VIOLATIONS'], str) else (row['VIOLATIONS'] if row['VIOLATIONS'] else [])
-        compliant_rules = json.loads(row['COMPLIANT_RULES']) if row['COMPLIANT_RULES'] and isinstance(row['COMPLIANT_RULES'], str) else (row['COMPLIANT_RULES'] if row['COMPLIANT_RULES'] else [])
-        applicable_rules = json.loads(row['APPLICABLE_RULES']) if row['APPLICABLE_RULES'] and isinstance(row['APPLICABLE_RULES'], str) else (row['APPLICABLE_RULES'] if row['APPLICABLE_RULES'] else [])
+        violations = parse_json_field(row['VIOLATIONS'])
+        compliant_rules = parse_json_field(row['COMPLIANT_RULES'])
+        applicable_rules = parse_json_field(row['APPLICABLE_RULES'])
         
         compliance_data.append({
             'warehouse_name': row['WAREHOUSE_NAME'],
@@ -817,11 +805,10 @@ def get_db_compliance_results(session):
     
     # Convert to list of dictionaries matching the original format
     compliance_data = []
-    for _, row in df.iterrows():
-        # Parse JSON strings back to Python objects
-        violations = json.loads(row['VIOLATIONS']) if row['VIOLATIONS'] and isinstance(row['VIOLATIONS'], str) else (row['VIOLATIONS'] if row['VIOLATIONS'] else [])
-        compliant_rules = json.loads(row['COMPLIANT_RULES']) if row['COMPLIANT_RULES'] and isinstance(row['COMPLIANT_RULES'], str) else (row['COMPLIANT_RULES'] if row['COMPLIANT_RULES'] else [])
-        applicable_rules = json.loads(row['APPLICABLE_RULES']) if row['APPLICABLE_RULES'] and isinstance(row['APPLICABLE_RULES'], str) else (row['APPLICABLE_RULES'] if row['APPLICABLE_RULES'] else [])
+    for _, row in df.iterrows():        
+        violations = parse_json_field(row['VIOLATIONS'])
+        compliant_rules = parse_json_field(row['COMPLIANT_RULES'])
+        applicable_rules = parse_json_field(row['APPLICABLE_RULES'])
         
         compliance_data.append({
             'object_type': row['OBJECT_TYPE'],
@@ -864,9 +851,10 @@ def get_tag_compliance_results(session):
     # Convert to list of dictionaries matching the original format
     compliance_data = []
     for _, row in df.iterrows():
-        # Parse JSON strings back to Python objects
-        assigned_tags = json.loads(row['ASSIGNED_TAGS']) if row['ASSIGNED_TAGS'] and isinstance(row['ASSIGNED_TAGS'], str) else (row['ASSIGNED_TAGS'] if row['ASSIGNED_TAGS'] else [])
-        violations = json.loads(row['VIOLATIONS']) if row['VIOLATIONS'] and isinstance(row['VIOLATIONS'], str) else (row['VIOLATIONS'] if row['VIOLATIONS'] else [])
+        # Parse JSON strings back to Python objects, handling both string and already-parsed objects
+        
+        assigned_tags = parse_json_field(row['ASSIGNED_TAGS'])
+        violations = parse_json_field(row['VIOLATIONS'])
         
         compliance_data.append({
             'object_name': row['OBJECT_NAME'],
@@ -891,7 +879,6 @@ def run_all_compliance_checks(session):
     Returns:
         dict: Summary of results with counts
     """
-    from compliance import check_wh_compliance, check_table_compliance, check_tag_compliance
     
     summary = {
         'warehouses_evaluated': 0,
