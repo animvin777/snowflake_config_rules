@@ -102,11 +102,22 @@ def render_tag_compliance_tab(session):
     st.markdown("---")
     offset = st.session_state.tag_current_page * st.session_state.tag_page_size
     
+    # Map filter to status
+    filter_to_status = {
+        "All Objects": "all",
+        "Compliant Only": "compliant",
+        "Non-Compliant Only": "non-compliant",
+        "Whitelisted Only": "whitelisted",
+        "Non-Compliant First": "all"  # Sort handled separately
+    }
+    status_filter = filter_to_status.get(st.session_state.tag_compliance_filter, "all")
+    
     try:
         compliance_data, total_count = get_tag_compliance_results_paginated(
             session,
             object_type=st.session_state.tag_object_type_filter,
             search_term=st.session_state.tag_search_term if st.session_state.tag_search_term else None,
+            status_filter=status_filter,
             limit=st.session_state.tag_page_size,
             offset=offset
         )
@@ -130,19 +141,12 @@ def render_tag_compliance_tab(session):
     
     st.markdown("---")
     
-    # Filter compliance data based on status selection
+    # Sort if "Non-Compliant First" is selected (filtering already done at DB level)
     view_filter = st.session_state.tag_compliance_filter
     filtered_data = compliance_data
     
-    # Sort if "Non-Compliant First" is selected
     if view_filter == "Non-Compliant First":
         filtered_data = sorted(filtered_data, key=lambda x: (len([v for v in x['violations'] if not v.get('is_whitelisted', False)]) == 0, x['object_name']))
-    elif view_filter == "Whitelisted Only":
-        filtered_data = [obj for obj in filtered_data if any(v.get('is_whitelisted', False) for v in obj['violations'])]
-    elif view_filter == "Non-Compliant Only":
-        filtered_data = [obj for obj in filtered_data if any(not v.get('is_whitelisted', False) for v in obj['violations'])]
-    elif view_filter == "Compliant Only":
-        filtered_data = [obj for obj in filtered_data if not any(not v.get('is_whitelisted', False) for v in obj['violations'])]
     
     # Display results
     if not filtered_data:

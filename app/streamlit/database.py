@@ -874,22 +874,52 @@ def get_tag_compliance_results(session):
 # PAGINATED COMPLIANCE QUERY FUNCTIONS
 # ===================================
 
-def get_wh_compliance_results_paginated(session, search_term=None, limit=10, offset=0):
+def get_wh_compliance_results_paginated(session, search_term=None, status_filter=None, limit=10, offset=0):
     """Retrieve warehouse compliance results with pagination and optional search
     
     Args:
         session: Snowflake session
         search_term: Optional warehouse name search filter
+        status_filter: Optional status filter ('compliant', 'non-compliant', 'whitelisted', 'all')
         limit: Number of records to return
         offset: Number of records to skip
     
     Returns:
         tuple: (List of dictionaries with compliance information, total_count)
     """
-    # Build WHERE clause for search
-    where_clause = ""
+    # Build WHERE clause
+    where_conditions = []
     if search_term:
-        where_clause = f"WHERE warehouse_name ILIKE '%{search_term}%'"
+        where_conditions.append(f"warehouse_name ILIKE '%{search_term}%'")
+    
+    # Add status filter using CTE to parse violations
+    if status_filter and status_filter != 'all':
+        if status_filter == 'compliant':
+            # No non-whitelisted violations
+            where_conditions.append("""
+                NOT EXISTS (
+                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
+                    WHERE v.value:is_whitelisted::BOOLEAN = FALSE
+                )
+            """)
+        elif status_filter == 'non-compliant':
+            # Has non-whitelisted violations
+            where_conditions.append("""
+                EXISTS (
+                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
+                    WHERE v.value:is_whitelisted::BOOLEAN = FALSE
+                )
+            """)
+        elif status_filter == 'whitelisted':
+            # Has whitelisted violations
+            where_conditions.append("""
+                EXISTS (
+                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
+                    WHERE v.value:is_whitelisted::BOOLEAN = TRUE
+                )
+            """)
+    
+    where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
     
     # Get total count
     count_query = f"""
@@ -947,13 +977,14 @@ def get_wh_compliance_results_paginated(session, search_term=None, limit=10, off
     return compliance_data, total_count
 
 
-def get_db_compliance_results_paginated(session, object_type=None, search_term=None, limit=10, offset=0):
+def get_db_compliance_results_paginated(session, object_type=None, search_term=None, status_filter=None, limit=10, offset=0):
     """Retrieve database/schema/table compliance results with pagination and optional search
     
     Args:
         session: Snowflake session
         object_type: Filter by object type ('DATABASE', 'SCHEMA', 'TABLE')
         search_term: Optional object name search filter
+        status_filter: Optional status filter ('compliant', 'non-compliant', 'whitelisted', 'all')
         limit: Number of records to return
         offset: Number of records to skip
     
@@ -966,6 +997,30 @@ def get_db_compliance_results_paginated(session, object_type=None, search_term=N
         where_clauses.append(f"object_type = '{object_type}'")
     if search_term:
         where_clauses.append(f"(database_name ILIKE '%{search_term}%' OR schema_name ILIKE '%{search_term}%' OR table_name ILIKE '%{search_term}%')")
+    
+    # Add status filter
+    if status_filter and status_filter != 'all':
+        if status_filter == 'compliant':
+            where_clauses.append("""
+                NOT EXISTS (
+                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
+                    WHERE v.value:is_whitelisted::BOOLEAN = FALSE
+                )
+            """)
+        elif status_filter == 'non-compliant':
+            where_clauses.append("""
+                EXISTS (
+                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
+                    WHERE v.value:is_whitelisted::BOOLEAN = FALSE
+                )
+            """)
+        elif status_filter == 'whitelisted':
+            where_clauses.append("""
+                EXISTS (
+                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
+                    WHERE v.value:is_whitelisted::BOOLEAN = TRUE
+                )
+            """)
     
     where_clause = ""
     if where_clauses:
@@ -1031,13 +1086,14 @@ def get_db_compliance_results_paginated(session, object_type=None, search_term=N
     return compliance_data, total_count
 
 
-def get_tag_compliance_results_paginated(session, object_type=None, search_term=None, limit=10, offset=0):
+def get_tag_compliance_results_paginated(session, object_type=None, search_term=None, status_filter=None, limit=10, offset=0):
     """Retrieve tag compliance results with pagination and optional search
     
     Args:
         session: Snowflake session
         object_type: Filter by object type ('WAREHOUSE', 'DATABASE', 'TABLE')
         search_term: Optional object name search filter
+        status_filter: Optional status filter ('compliant', 'non-compliant', 'whitelisted', 'all')
         limit: Number of records to return
         offset: Number of records to skip
     
@@ -1050,6 +1106,30 @@ def get_tag_compliance_results_paginated(session, object_type=None, search_term=
         where_clauses.append(f"object_type = '{object_type}'")
     if search_term:
         where_clauses.append(f"object_name ILIKE '%{search_term}%'")
+    
+    # Add status filter
+    if status_filter and status_filter != 'all':
+        if status_filter == 'compliant':
+            where_clauses.append("""
+                NOT EXISTS (
+                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
+                    WHERE v.value:is_whitelisted::BOOLEAN = FALSE
+                )
+            """)
+        elif status_filter == 'non-compliant':
+            where_clauses.append("""
+                EXISTS (
+                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
+                    WHERE v.value:is_whitelisted::BOOLEAN = FALSE
+                )
+            """)
+        elif status_filter == 'whitelisted':
+            where_clauses.append("""
+                EXISTS (
+                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
+                    WHERE v.value:is_whitelisted::BOOLEAN = TRUE
+                )
+            """)
     
     where_clause = ""
     if where_clauses:

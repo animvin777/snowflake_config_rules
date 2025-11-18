@@ -86,10 +86,21 @@ def render_wh_compliance_view_tab(session):
             st.markdown("---")
             offset = st.session_state.wh_current_page * st.session_state.wh_page_size
             
+            # Map filter to status
+            filter_to_status = {
+                "All Warehouses": "all",
+                "Compliant Only": "compliant",
+                "Non-Compliant Only": "non-compliant",
+                "Whitelisted Only": "whitelisted",
+                "Non-Compliant First": "all"  # Sort handled separately
+            }
+            status_filter = filter_to_status.get(st.session_state.wh_compliance_filter, "all")
+            
             try:
                 compliance_data, total_count = get_wh_compliance_results_paginated(
                     session, 
                     search_term=st.session_state.wh_search_term if st.session_state.wh_search_term else None,
+                    status_filter=status_filter,
                     limit=st.session_state.wh_page_size,
                     offset=offset
                 )
@@ -123,7 +134,7 @@ def _render_tile_view(session, compliance_data, view_filter):
     """Render tile view of warehouse compliance"""
     # Sort data if "Non-Compliant First" is selected
     if view_filter == "Non-Compliant First":
-        compliance_data = sorted(compliance_data, key=lambda x: (len(x['violations']) == 0, x['warehouse_name']))
+        compliance_data = sorted(compliance_data, key=lambda x: (len([v for v in x['violations'] if not v.get('is_whitelisted', False)]) == 0, x['warehouse_name']))
     
     for wh_comp in compliance_data:
         # Separate whitelisted and non-whitelisted violations
@@ -134,15 +145,7 @@ def _render_tile_view(session, compliance_data, view_filter):
         has_violations = len(non_whitelisted_violations) > 0
         warehouse_name = wh_comp['warehouse_name']
         
-        # Apply status filter
-        if view_filter == "Whitelisted Only":
-            # Show only warehouses with whitelisted violations
-            if not whitelisted_violations:
-                continue
-        elif view_filter == "Non-Compliant Only" and not has_violations:
-            continue
-        elif view_filter == "Compliant Only" and has_violations:
-            continue
+        # No need to filter here - it's already done at database level
         
         # Check if this warehouse was recently fixed
         if warehouse_name in st.session_state.fixed_warehouses:
