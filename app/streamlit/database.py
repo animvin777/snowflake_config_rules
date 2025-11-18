@@ -887,50 +887,61 @@ def get_wh_compliance_results_paginated(session, search_term=None, status_filter
     Returns:
         tuple: (List of dictionaries with compliance information, total_count)
     """
+    # Build base query with CTE for violation parsing
+    base_cte = """
+    WITH parsed_data AS (
+        SELECT 
+            warehouse_name,
+            warehouse_type,
+            warehouse_size,
+            warehouse_owner,
+            violations,
+            compliant_rules,
+            applicable_rules,
+            last_evaluated_at,
+            ARRAY_SIZE(violations) as total_violations,
+            (
+                SELECT COUNT(*)
+                FROM TABLE(FLATTEN(input => violations)) v
+                WHERE v.value:is_whitelisted::BOOLEAN = FALSE
+            ) as non_whitelisted_count,
+            (
+                SELECT COUNT(*)
+                FROM TABLE(FLATTEN(input => violations)) v
+                WHERE v.value:is_whitelisted::BOOLEAN = TRUE
+            ) as whitelisted_count
+        FROM data_schema.warehouse_compliance_results
+    )
+    """
+    
     # Build WHERE clause
     where_conditions = []
     if search_term:
         where_conditions.append(f"warehouse_name ILIKE '%{search_term}%'")
     
-    # Add status filter using CTE to parse violations
+    # Add status filter
     if status_filter and status_filter != 'all':
         if status_filter == 'compliant':
-            # No non-whitelisted violations
-            where_conditions.append("""
-                NOT EXISTS (
-                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
-                    WHERE v.value:is_whitelisted::BOOLEAN = FALSE
-                )
-            """)
+            where_conditions.append("non_whitelisted_count = 0")
         elif status_filter == 'non-compliant':
-            # Has non-whitelisted violations
-            where_conditions.append("""
-                EXISTS (
-                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
-                    WHERE v.value:is_whitelisted::BOOLEAN = FALSE
-                )
-            """)
+            where_conditions.append("non_whitelisted_count > 0")
         elif status_filter == 'whitelisted':
-            # Has whitelisted violations
-            where_conditions.append("""
-                EXISTS (
-                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
-                    WHERE v.value:is_whitelisted::BOOLEAN = TRUE
-                )
-            """)
+            where_conditions.append("whitelisted_count > 0")
     
     where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
     
     # Get total count
     count_query = f"""
+    {base_cte}
     SELECT COUNT(*) as total
-    FROM data_schema.warehouse_compliance_results
+    FROM parsed_data
     {where_clause}
     """
     total_count = session.sql(count_query).to_pandas().iloc[0]['TOTAL']
     
     # Get paginated data
     query = f"""
+    {base_cte}
     SELECT 
         warehouse_name,
         warehouse_type,
@@ -940,7 +951,7 @@ def get_wh_compliance_results_paginated(session, search_term=None, status_filter
         compliant_rules,
         applicable_rules,
         last_evaluated_at
-    FROM data_schema.warehouse_compliance_results
+    FROM parsed_data
     {where_clause}
     ORDER BY warehouse_name
     LIMIT {limit} OFFSET {offset}
@@ -991,6 +1002,34 @@ def get_db_compliance_results_paginated(session, object_type=None, search_term=N
     Returns:
         tuple: (List of dictionaries with compliance information, total_count)
     """
+    # Build base query with CTE for violation parsing
+    base_cte = """
+    WITH parsed_data AS (
+        SELECT 
+            object_type,
+            database_name,
+            schema_name,
+            table_name,
+            table_type,
+            table_owner,
+            violations,
+            compliant_rules,
+            applicable_rules,
+            last_evaluated_at,
+            (
+                SELECT COUNT(*)
+                FROM TABLE(FLATTEN(input => violations)) v
+                WHERE v.value:is_whitelisted::BOOLEAN = FALSE
+            ) as non_whitelisted_count,
+            (
+                SELECT COUNT(*)
+                FROM TABLE(FLATTEN(input => violations)) v
+                WHERE v.value:is_whitelisted::BOOLEAN = TRUE
+            ) as whitelisted_count
+        FROM data_schema.database_compliance_results
+    )
+    """
+    
     # Build WHERE clause
     where_clauses = []
     if object_type:
@@ -1001,26 +1040,11 @@ def get_db_compliance_results_paginated(session, object_type=None, search_term=N
     # Add status filter
     if status_filter and status_filter != 'all':
         if status_filter == 'compliant':
-            where_clauses.append("""
-                NOT EXISTS (
-                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
-                    WHERE v.value:is_whitelisted::BOOLEAN = FALSE
-                )
-            """)
+            where_clauses.append("non_whitelisted_count = 0")
         elif status_filter == 'non-compliant':
-            where_clauses.append("""
-                EXISTS (
-                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
-                    WHERE v.value:is_whitelisted::BOOLEAN = FALSE
-                )
-            """)
+            where_clauses.append("non_whitelisted_count > 0")
         elif status_filter == 'whitelisted':
-            where_clauses.append("""
-                EXISTS (
-                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
-                    WHERE v.value:is_whitelisted::BOOLEAN = TRUE
-                )
-            """)
+            where_clauses.append("whitelisted_count > 0")
     
     where_clause = ""
     if where_clauses:
@@ -1028,14 +1052,16 @@ def get_db_compliance_results_paginated(session, object_type=None, search_term=N
     
     # Get total count
     count_query = f"""
+    {base_cte}
     SELECT COUNT(*) as total
-    FROM data_schema.database_compliance_results
+    FROM parsed_data
     {where_clause}
     """
     total_count = session.sql(count_query).to_pandas().iloc[0]['TOTAL']
     
     # Get paginated data
     query = f"""
+    {base_cte}
     SELECT 
         object_type,
         database_name,
@@ -1047,7 +1073,7 @@ def get_db_compliance_results_paginated(session, object_type=None, search_term=N
         compliant_rules,
         applicable_rules,
         last_evaluated_at
-    FROM data_schema.database_compliance_results
+    FROM parsed_data
     {where_clause}
     ORDER BY object_type, database_name, schema_name, table_name
     LIMIT {limit} OFFSET {offset}
@@ -1100,6 +1126,33 @@ def get_tag_compliance_results_paginated(session, object_type=None, search_term=
     Returns:
         tuple: (List of dictionaries with compliance information, total_count)
     """
+    # Build base query with CTE for violation parsing
+    base_cte = """
+    WITH parsed_data AS (
+        SELECT 
+            object_name,
+            object_database,
+            object_schema,
+            object_type,
+            table_type,
+            owner,
+            assigned_tags,
+            violations,
+            last_evaluated_at,
+            (
+                SELECT COUNT(*)
+                FROM TABLE(FLATTEN(input => violations)) v
+                WHERE v.value:is_whitelisted::BOOLEAN = FALSE
+            ) as non_whitelisted_count,
+            (
+                SELECT COUNT(*)
+                FROM TABLE(FLATTEN(input => violations)) v
+                WHERE v.value:is_whitelisted::BOOLEAN = TRUE
+            ) as whitelisted_count
+        FROM data_schema.tag_compliance_results
+    )
+    """
+    
     # Build WHERE clause
     where_clauses = []
     if object_type:
@@ -1110,26 +1163,11 @@ def get_tag_compliance_results_paginated(session, object_type=None, search_term=
     # Add status filter
     if status_filter and status_filter != 'all':
         if status_filter == 'compliant':
-            where_clauses.append("""
-                NOT EXISTS (
-                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
-                    WHERE v.value:is_whitelisted::BOOLEAN = FALSE
-                )
-            """)
+            where_clauses.append("non_whitelisted_count = 0")
         elif status_filter == 'non-compliant':
-            where_clauses.append("""
-                EXISTS (
-                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
-                    WHERE v.value:is_whitelisted::BOOLEAN = FALSE
-                )
-            """)
+            where_clauses.append("non_whitelisted_count > 0")
         elif status_filter == 'whitelisted':
-            where_clauses.append("""
-                EXISTS (
-                    SELECT 1 FROM TABLE(FLATTEN(input => violations)) v
-                    WHERE v.value:is_whitelisted::BOOLEAN = TRUE
-                )
-            """)
+            where_clauses.append("whitelisted_count > 0")
     
     where_clause = ""
     if where_clauses:
@@ -1137,14 +1175,16 @@ def get_tag_compliance_results_paginated(session, object_type=None, search_term=
     
     # Get total count
     count_query = f"""
+    {base_cte}
     SELECT COUNT(*) as total
-    FROM data_schema.tag_compliance_results
+    FROM parsed_data
     {where_clause}
     """
     total_count = session.sql(count_query).to_pandas().iloc[0]['TOTAL']
     
     # Get paginated data
     query = f"""
+    {base_cte}
     SELECT 
         object_name,
         object_database,
@@ -1155,7 +1195,7 @@ def get_tag_compliance_results_paginated(session, object_type=None, search_term=
         assigned_tags,
         violations,
         last_evaluated_at
-    FROM data_schema.tag_compliance_results
+    FROM parsed_data
     {where_clause}
     ORDER BY object_type, object_name
     LIMIT {limit} OFFSET {offset}
