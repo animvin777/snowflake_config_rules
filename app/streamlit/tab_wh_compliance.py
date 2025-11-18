@@ -6,8 +6,8 @@ Displays warehouse compliance status against applied rules
 import streamlit as st
 import pandas as pd
 from database import (get_applied_rules, get_warehouse_details, execute_sql, get_wh_statement_timeout_default, 
-                      get_tag_compliance_details, get_whitelisted_violations, add_to_whitelist)
-from compliance import check_wh_compliance, generate_wh_fix_sql, generate_wh_post_fix_update_sql
+                      get_tag_compliance_details, get_whitelisted_violations, add_to_whitelist, get_wh_compliance_results)
+from compliance import generate_wh_fix_sql, generate_wh_post_fix_update_sql
 from ui_utils import render_refresh_button, render_section_header, render_filter_button, filter_by_search
 
 
@@ -35,25 +35,15 @@ def render_wh_compliance_view_tab(session):
     if applied_rules_df.empty:
         st.info("No rules applied yet. Go to 'Rule Configuration' tab to apply rules.")
     else:
-        warehouse_df = get_warehouse_details(session)
+        # Get compliance data from table instead of calculating
+        try:
+            compliance_data = get_wh_compliance_results(session)
+        except:
+            compliance_data = []
         
-        if warehouse_df.empty:
-            st.warning("No warehouse data available. The monitoring task may not have run yet.")
+        if not compliance_data:
+            st.warning("No compliance data available. Click 'Run Rules' in the Rule Configuration tab to generate compliance results.")
         else:
-            # Get tag data for warehouses
-            try:
-                tag_df = get_tag_compliance_details(session, object_type='WAREHOUSE')
-            except:
-                tag_df = pd.DataFrame()
-            
-            # Get whitelist data
-            try:
-                whitelist_df = get_whitelisted_violations(session, object_type='WAREHOUSE')
-            except:
-                whitelist_df = pd.DataFrame()
-            
-            compliance_data = check_wh_compliance(warehouse_df, applied_rules_df, tag_df, whitelist_df)
-            
             # Summary metrics
             total_warehouses = len(compliance_data)
             # Count non-compliant as warehouses with non-whitelisted violations

@@ -132,6 +132,48 @@ CREATE TABLE IF NOT EXISTS data_schema.tag_compliance_details (
 );
 
 
+-- Create table to store warehouse compliance results
+CREATE TABLE IF NOT EXISTS data_schema.warehouse_compliance_results (
+    warehouse_name VARCHAR(255) NOT NULL,
+    warehouse_type VARCHAR(50),
+    warehouse_size VARCHAR(50),
+    warehouse_owner VARCHAR(255),
+    violations VARIANT,  -- JSON array of violations
+    compliant_rules VARIANT,  -- JSON array of compliant rules
+    applicable_rules VARIANT,  -- JSON array of applicable rules
+    last_evaluated_at TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP()
+);
+
+
+-- Create table to store database/schema/table compliance results
+CREATE TABLE IF NOT EXISTS data_schema.database_compliance_results (
+    object_type VARCHAR(50) NOT NULL,  -- 'DATABASE', 'SCHEMA', 'TABLE'
+    database_name VARCHAR(255),
+    schema_name VARCHAR(255),
+    table_name VARCHAR(255),
+    table_type VARCHAR(50),
+    table_owner VARCHAR(255),
+    violations VARIANT,  -- JSON array of violations
+    compliant_rules VARIANT,  -- JSON array of compliant rules
+    applicable_rules VARIANT,  -- JSON array of applicable rules
+    last_evaluated_at TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP()
+);
+
+
+-- Create table to store tag compliance results
+CREATE TABLE IF NOT EXISTS data_schema.tag_compliance_results (
+    object_name VARCHAR(16777216) NOT NULL,
+    object_database VARCHAR(255),
+    object_schema VARCHAR(255),
+    object_type VARCHAR(50) NOT NULL,
+    table_type VARCHAR(50),
+    owner VARCHAR(255),
+    assigned_tags VARIANT,  -- JSON array of assigned tags
+    violations VARIANT,  -- JSON array of violations
+    last_evaluated_at TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP()
+);
+
+
 -- Insert predefined configuration rules for warehouses
 INSERT INTO data_schema.config_rules (rule_id, rule_name, rule_description, rule_type, check_parameter, comparison_operator, unit, default_threshold, allow_threshold_override, has_fix_button, has_fix_sql)
 SELECT 'MAX_STATEMENT_TIMEOUT', 'Max Statement Timeout in Seconds', 'Maximum allowed statement timeout for warehouses', 'Warehouse', 'STATEMENT_TIMEOUT_IN_SECONDS', 'MAX', 'seconds', 300, TRUE, TRUE, TRUE
@@ -402,3 +444,6 @@ GRANT ALL ON TABLE data_schema.config_rules TO APPLICATION ROLE config_rules_adm
 GRANT ALL ON TABLE data_schema.applied_rules TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.applied_tag_rules TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.rule_whitelist TO APPLICATION ROLE config_rules_admin;
+GRANT ALL ON TABLE data_schema.warehouse_compliance_results TO APPLICATION ROLE config_rules_admin;
+GRANT ALL ON TABLE data_schema.database_compliance_results TO APPLICATION ROLE config_rules_admin;
+GRANT ALL ON TABLE data_schema.tag_compliance_results TO APPLICATION ROLE config_rules_admin;

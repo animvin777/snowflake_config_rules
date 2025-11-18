@@ -5,8 +5,8 @@ Handles the display of tag compliance status for warehouses, databases, and tabl
 
 import streamlit as st
 import pandas as pd
-from database import get_applied_tag_rules, get_tag_compliance_details, get_all_objects_by_type, get_whitelisted_violations, add_to_whitelist
-from compliance import check_tag_compliance, generate_tag_fix_sql
+from database import get_applied_tag_rules, get_tag_compliance_details, get_all_objects_by_type, get_whitelisted_violations, add_to_whitelist, get_tag_compliance_results
+from compliance import generate_tag_fix_sql
 from ui_utils import render_refresh_button, render_section_header, render_filter_button
 
 
@@ -50,24 +50,16 @@ def render_tag_compliance_tab(session):
         st.info(f"No tag rules have been applied for {object_type_filter}s yet.")
         return
     
-    # Get all objects of the selected type
-    all_objects_df = get_all_objects_by_type(session, object_type_filter)
-    
-    if all_objects_df.empty:
-        st.warning(f"No {object_type_filter.lower()}s found in the account.")
-        return
-    
-    # Get tag assignments for the selected object type
-    tag_assignments_df = get_tag_compliance_details(session, object_type_filter)
-    
-    # Get whitelist data
+    # Get compliance data from table and filter by object type
     try:
-        whitelist_df = get_whitelisted_violations(session, object_type=object_type_filter)
+        all_compliance_data = get_tag_compliance_results(session)
+        compliance_data = [obj for obj in all_compliance_data if obj.get('object_type') == object_type_filter]
     except:
-        whitelist_df = pd.DataFrame()
+        compliance_data = []
     
-    # Check compliance
-    compliance_data = check_tag_compliance(all_objects_df, tag_assignments_df, object_tag_rules, whitelist_df)
+    if not compliance_data:
+        st.warning(f"No compliance data available for {object_type_filter}s. Click 'Run Rules' in the Rule Configuration tab to generate compliance results.")
+        return
     
     # Calculate summary statistics
     total_objects = len(compliance_data)

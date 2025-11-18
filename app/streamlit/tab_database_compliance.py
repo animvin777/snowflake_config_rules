@@ -6,8 +6,8 @@ Handles the display of database, schema, and table compliance status and remedia
 import streamlit as st
 import pandas as pd
 from database import (get_database_retention_details, get_applied_rules, execute_sql, 
-                      get_tag_compliance_details, get_whitelisted_violations, add_to_whitelist)
-from compliance import check_table_compliance, generate_table_fix_sql
+                      get_tag_compliance_details, get_whitelisted_violations, add_to_whitelist, get_db_compliance_results)
+from compliance import generate_table_fix_sql
 from ui_utils import render_refresh_button, render_section_header, render_filter_button
 
 
@@ -34,27 +34,15 @@ def render_database_compliance_tab(session):
         st.info("No database rules have been applied yet. Go to the Rule Configuration tab to apply database rules.")
         return
     
-    # Get all retention details (databases, schemas, tables)
-    retention_df = get_database_retention_details(session)
+    # Get compliance data from table instead of calculating
+    try:
+        compliance_data = get_db_compliance_results(session)
+    except:
+        compliance_data = []
     
-    if retention_df.empty:
-        st.warning("No retention data available. Please execute the db_retention_monitor_task from the Task Management tab.")
+    if not compliance_data:
+        st.warning("No compliance data available. Click 'Run Rules' in the Rule Configuration tab to generate compliance results.")
         return
-    
-    # Get tag data for databases/tables
-    try:
-        tag_df = get_tag_compliance_details(session)
-    except:
-        tag_df = pd.DataFrame()
-    
-    # Get whitelist data
-    try:
-        whitelist_df = get_whitelisted_violations(session)
-    except:
-        whitelist_df = pd.DataFrame()
-    
-    # Check compliance
-    compliance_data = check_table_compliance(retention_df, db_rules, tag_df, whitelist_df)
     
     # Calculate summary statistics by object type
     total_objects = len(compliance_data)

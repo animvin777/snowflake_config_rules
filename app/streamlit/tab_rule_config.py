@@ -8,8 +8,9 @@ import pandas as pd
 from database import (get_config_rules, get_applied_rules, apply_rule, deactivate_applied_rule, 
                       get_warehouse_details, get_database_retention_details, get_wh_statement_timeout_default,
                       get_available_tag_names,get_available_tags, get_applied_tag_rules, apply_tag_rule, deactivate_tag_rule,
-                      get_tag_compliance_details, get_all_objects_by_type, get_whitelisted_violations)
-from compliance import check_wh_compliance, generate_wh_fix_sql, check_table_compliance, generate_table_fix_sql, check_tag_compliance, generate_tag_fix_sql
+                      get_tag_compliance_details, get_all_objects_by_type, get_whitelisted_violations, run_all_compliance_checks,
+                      get_wh_compliance_results, get_db_compliance_results, get_tag_compliance_results)
+from compliance import generate_wh_fix_sql, generate_table_fix_sql, generate_tag_fix_sql
 from ui_utils import render_refresh_button, render_section_header, render_rule_card
 
 
@@ -22,6 +23,45 @@ def render_rule_configuration_tab(session):
     with col_refresh:
         if st.button("↻", key="refresh_tab1", help="Refresh data", type="secondary"):
             st.rerun()
+    st.markdown("---")
+    
+    # Run Rules button - prominent green button
+    st.html("""
+        <div style="display: flex; justify-content: center; margin: 20px 0;">
+            <div style="text-align: center;">
+                <p style="margin-bottom: 10px; color: #666; font-size: 0.9rem;">
+                    Run compliance checks for all applied rules and save results
+                </p>
+            </div>
+        </div>
+    """)
+    
+    col_left, col_center, col_right = st.columns([1, 2, 1])
+    with col_center:
+        if st.button("▶ Run Rules", key="run_rules_btn", type="primary", use_container_width=True, help="Execute all compliance checks and save results to tables"):
+            with st.spinner("Running compliance checks..."):
+                try:
+                    summary = run_all_compliance_checks(session)
+                    
+                    if summary['success']:
+                        st.success("✓ Compliance checks completed successfully!")
+                        
+                        # Show summary of results
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Warehouses Evaluated", summary['warehouses_evaluated'])
+                        with col2:
+                            st.metric("Database Objects Evaluated", summary['databases_evaluated'])
+                        with col3:
+                            st.metric("Tag Objects Evaluated", summary['tags_evaluated'])
+                        
+                        st.info("Results have been saved to compliance tables. View them in the respective compliance tabs.")
+                    else:
+                        st.error(f"Error running compliance checks: {summary.get('error', 'Unknown error')}")
+                        
+                except Exception as e:
+                    st.error(f"Failed to run compliance checks: {str(e)}")
+    
     st.markdown("---")
     
     # Display available rules in a nicer format
@@ -305,9 +345,8 @@ def render_rule_configuration_tab(session):
             db_rules = applied_rules_df[applied_rules_df['RULE_TYPE'] == 'Database'] if not applied_rules_df.empty else pd.DataFrame()
             
             if not db_rules.empty:
-                # Get compliance data once for all database rules
-                retention_df = get_database_retention_details(session)
-                whitelist_df = get_whitelisted_violations(session)
+                # Get compliance data once for all database rules from the database
+                compliance_data = get_db_compliance_results(session)
                 
                 for _, rule in db_rules.iterrows():
                     rule_type_class = "database"
@@ -315,8 +354,7 @@ def render_rule_configuration_tab(session):
                     
                     # Calculate violation count for this specific applied rule
                     violation_count = 0
-                    if not retention_df.empty:
-                        compliance_data = check_table_compliance(retention_df, applied_rules_df[applied_rules_df['APPLIED_RULE_ID'] == rule['APPLIED_RULE_ID']],tag_df, whitelist_df)
+                    if compliance_data:
                         for obj_comp in compliance_data:
                             for violation in obj_comp['violations']:
                                 if violation.get('applied_rule_id') == rule['APPLIED_RULE_ID'] and not violation.get('is_whitelisted', False):
@@ -352,11 +390,11 @@ def render_rule_configuration_tab(session):
                     # Show SQL if button was clicked
                     if st.session_state.get(f'show_sql_{rule["APPLIED_RULE_ID"]}', False):
                         # Generate SQL for database/schema/table rules - only for this specific applied rule
-                        retention_df = get_database_retention_details(session)
-                        compliance_data = check_table_compliance(retention_df, applied_rules_df[applied_rules_df['APPLIED_RULE_ID'] == rule['APPLIED_RULE_ID']], tag_df, whitelist_df)
+                        # Get compliance data from database
+                        all_compliance_data = get_db_compliance_results(session)
                         
                         sql_statements = []
-                        for obj_comp in compliance_data:
+                        for obj_comp in all_compliance_data:
                             for violation in obj_comp['violations']:
                                 if violation.get('applied_rule_id') == rule['APPLIED_RULE_ID'] and not violation.get('is_whitelisted', False):
                                     sql = generate_table_fix_sql(
@@ -384,9 +422,8 @@ def render_rule_configuration_tab(session):
             wh_rules = applied_rules_df[applied_rules_df['RULE_TYPE'] == 'Warehouse'] if not applied_rules_df.empty else pd.DataFrame()
             
             if not wh_rules.empty:
-                # Get compliance data once for all warehouse rules
-                warehouse_df = get_warehouse_details(session)
-                whitelist_df = get_whitelisted_violations(session)
+                # Get compliance data once for all warehouse rules from the database
+                compliance_data = get_wh_compliance_results(session)
                 
                 for _, rule in wh_rules.iterrows():
                     rule_type_class = "warehouse"
@@ -394,9 +431,7 @@ def render_rule_configuration_tab(session):
                     
                     # Calculate violation count for this specific applied rule
                     violation_count = 0
-                    if not warehouse_df.empty:
-                        # Pass only this specific applied rule to get violations for this rule instance
-                        compliance_data = check_wh_compliance(warehouse_df, applied_rules_df[applied_rules_df['APPLIED_RULE_ID'] == rule['APPLIED_RULE_ID']],tag_df, whitelist_df)
+                    if compliance_data:
                         for wh_comp in compliance_data:
                             for violation in wh_comp['violations']:
                                 if violation.get('applied_rule_id') == rule['APPLIED_RULE_ID'] and not violation.get('is_whitelisted', False):
@@ -432,11 +467,11 @@ def render_rule_configuration_tab(session):
                     # Show SQL if button was clicked
                     if st.session_state.get(f'show_sql_{rule["APPLIED_RULE_ID"]}', False):
                         # Generate SQL for warehouse rules - only for this specific applied rule
-                        warehouse_df = get_warehouse_details(session)
-                        compliance_data = check_wh_compliance(warehouse_df, applied_rules_df[applied_rules_df['APPLIED_RULE_ID'] == rule['APPLIED_RULE_ID']], tag_df, whitelist_df)
+                        # Get compliance data from database
+                        all_compliance_data = get_wh_compliance_results(session)
                         
                         sql_statements = []
-                        for wh_comp in compliance_data:
+                        for wh_comp in all_compliance_data:
                             for violation in wh_comp['violations']:
                                 if violation.get('applied_rule_id') == rule['APPLIED_RULE_ID'] and not violation.get('is_whitelisted', False):
                                     sql = generate_wh_fix_sql(
@@ -459,17 +494,20 @@ def render_rule_configuration_tab(session):
         # Tab 3: Tag Rules
         with tab3:
             if not applied_tag_rules_df.empty:
+                # Get all tag compliance data once from database
+                all_tag_compliance_data = get_tag_compliance_results(session)
+                
                 for _, tag_rule in applied_tag_rules_df.iterrows():
                     # Calculate violation count for this tag rule
                     violation_count = 0
                     try:
-                        all_objects_df = get_all_objects_by_type(session, tag_rule['OBJECT_TYPE'])
-                        tag_assignments_df = get_tag_compliance_details(session, tag_rule['OBJECT_TYPE'])
-                        whitelist_df = get_whitelisted_violations(session, object_type=tag_rule['OBJECT_TYPE'])
-                        single_rule_df = applied_tag_rules_df[applied_tag_rules_df['APPLIED_TAG_RULE_ID'] == tag_rule['APPLIED_TAG_RULE_ID']]
-                        compliance_data = check_tag_compliance(all_objects_df, tag_assignments_df, single_rule_df, whitelist_df)
+                        # Filter compliance data for this specific tag rule's object type
+                        relevant_compliance = [
+                            obj for obj in all_tag_compliance_data 
+                            if obj['object_type'] == tag_rule['OBJECT_TYPE']
+                        ]
                         
-                        for obj_comp in compliance_data:
+                        for obj_comp in relevant_compliance:
                             if obj_comp['violations']:
                                 # Only count non-whitelisted violations for THIS specific tag rule
                                 for violation in obj_comp['violations']:
@@ -521,21 +559,22 @@ def render_rule_configuration_tab(session):
                     
                     # Show SQL if button was clicked
                     if st.session_state.get(f'show_tag_sql_{tag_rule["APPLIED_TAG_RULE_ID"]}', False):
-                        # Get all objects of the specified type
-                        all_objects_df = get_all_objects_by_type(session, tag_rule['OBJECT_TYPE'])
-                        tag_assignments_df = get_tag_compliance_details(session, tag_rule['OBJECT_TYPE'])
-                        whitelist_df = get_whitelisted_violations(session, object_type=tag_rule['OBJECT_TYPE'])
+                        # Get compliance data from database for this specific tag rule
+                        all_tag_compliance = get_tag_compliance_results(session)
                         
-                        # Check compliance for this specific tag rule
-                        single_rule_df = applied_tag_rules_df[applied_tag_rules_df['APPLIED_TAG_RULE_ID'] == tag_rule['APPLIED_TAG_RULE_ID']]
-                        compliance_data = check_tag_compliance(all_objects_df, tag_assignments_df, single_rule_df, whitelist_df)
+                        # Filter for the specific object type of this tag rule
+                        relevant_compliance = [
+                            obj for obj in all_tag_compliance 
+                            if obj['object_type'] == tag_rule['OBJECT_TYPE']
+                        ]
                         
                         sql_statements = []
-                        for obj_comp in compliance_data:
+                        for obj_comp in relevant_compliance:
                             if obj_comp['violations']:
                                 for violation in obj_comp['violations']:
-                                    # Skip whitelisted violations
-                                    if not violation.get('is_whitelisted', False):
+                                    # Skip whitelisted violations and only process violations for this specific tag rule
+                                    if (not violation.get('is_whitelisted', False) and 
+                                        violation.get('applied_tag_rule_id') == tag_rule['APPLIED_TAG_RULE_ID']):
                                         sql = generate_tag_fix_sql(
                                             obj_comp['object_name'],
                                             obj_comp['object_type'],
