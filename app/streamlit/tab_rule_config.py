@@ -9,7 +9,8 @@ from database import (get_config_rules, get_applied_rules, apply_rule, deactivat
                       get_warehouse_details, get_database_retention_details, get_wh_statement_timeout_default,
                       get_available_tag_names,get_available_tags, get_applied_tag_rules, apply_tag_rule, deactivate_tag_rule,
                       get_tag_compliance_details, get_all_objects_by_type, get_whitelisted_violations, run_all_compliance_checks,
-                      get_wh_compliance_results, get_db_compliance_results, get_tag_compliance_results)
+                      get_wh_compliance_results, get_db_compliance_results, get_tag_compliance_results,
+                      get_rule_kpi_results, get_tag_rule_kpi_results)
 from compliance import generate_wh_fix_sql, generate_table_fix_sql, generate_tag_fix_sql
 from ui_utils import render_refresh_button, render_section_header, render_rule_card
 
@@ -338,6 +339,14 @@ def render_rule_configuration_tab(session):
     
     # Create tabs for different rule types
     if not applied_rules_df.empty or not applied_tag_rules_df.empty:
+        # Get KPI data once for all rules
+        try:
+            rule_kpi_df = get_rule_kpi_results(session)
+            tag_rule_kpi_df = get_tag_rule_kpi_results(session)
+        except:
+            rule_kpi_df = pd.DataFrame()
+            tag_rule_kpi_df = pd.DataFrame()
+        
         tab1, tab2, tab3 = st.tabs(["Database Rules", "Warehouse Rules", "Tag Rules"])
         
         # Tab 1: Database Rules
@@ -345,20 +354,16 @@ def render_rule_configuration_tab(session):
             db_rules = applied_rules_df[applied_rules_df['RULE_TYPE'] == 'Database'] if not applied_rules_df.empty else pd.DataFrame()
             
             if not db_rules.empty:
-                # Get compliance data once for all database rules from the database
-                compliance_data = get_db_compliance_results(session)
-                
                 for _, rule in db_rules.iterrows():
                     rule_type_class = "database"
                     rule_type_icon = '<span class="db-icon"></span>'
                     
-                    # Calculate violation count for this specific applied rule
+                    # Get violation count from KPI table
                     violation_count = 0
-                    if compliance_data:
-                        for obj_comp in compliance_data:
-                            for violation in obj_comp['violations']:
-                                if violation.get('applied_rule_id') == rule['APPLIED_RULE_ID'] and not violation.get('is_whitelisted', False):
-                                    violation_count += 1
+                    if not rule_kpi_df.empty:
+                        kpi_row = rule_kpi_df[rule_kpi_df['APPLIED_RULE_ID'] == rule['APPLIED_RULE_ID']]
+                        if not kpi_row.empty:
+                            violation_count = int(kpi_row.iloc[0]['TOTAL_VIOLATIONS'])
                     
                     # Render the rule card using utility function with violation count
                     render_rule_card(rule, rule_type_class, rule_type_icon, violation_count)
@@ -422,20 +427,16 @@ def render_rule_configuration_tab(session):
             wh_rules = applied_rules_df[applied_rules_df['RULE_TYPE'] == 'Warehouse'] if not applied_rules_df.empty else pd.DataFrame()
             
             if not wh_rules.empty:
-                # Get compliance data once for all warehouse rules from the database
-                compliance_data = get_wh_compliance_results(session)
-                
                 for _, rule in wh_rules.iterrows():
                     rule_type_class = "warehouse"
                     rule_type_icon = '<span class="wh-icon"></span>'
                     
-                    # Calculate violation count for this specific applied rule
+                    # Get violation count from KPI table
                     violation_count = 0
-                    if compliance_data:
-                        for wh_comp in compliance_data:
-                            for violation in wh_comp['violations']:
-                                if violation.get('applied_rule_id') == rule['APPLIED_RULE_ID'] and not violation.get('is_whitelisted', False):
-                                    violation_count += 1
+                    if not rule_kpi_df.empty:
+                        kpi_row = rule_kpi_df[rule_kpi_df['APPLIED_RULE_ID'] == rule['APPLIED_RULE_ID']]
+                        if not kpi_row.empty:
+                            violation_count = int(kpi_row.iloc[0]['TOTAL_VIOLATIONS'])
                     
                     # Render the rule card using utility function with violation count
                     render_rule_card(rule, rule_type_class, rule_type_icon, violation_count)
@@ -494,30 +495,13 @@ def render_rule_configuration_tab(session):
         # Tab 3: Tag Rules
         with tab3:
             if not applied_tag_rules_df.empty:
-                # Get all tag compliance data once from database
-                all_tag_compliance_data = get_tag_compliance_results(session)
-                
                 for _, tag_rule in applied_tag_rules_df.iterrows():
-                    # Calculate violation count for this tag rule
+                    # Get violation count from KPI table
                     violation_count = 0
-                    try:
-                        # Filter compliance data for this specific tag rule's object type
-                        relevant_compliance = [
-                            obj for obj in all_tag_compliance_data 
-                            if obj['object_type'] == tag_rule['OBJECT_TYPE']
-                        ]
-                        
-                        for obj_comp in relevant_compliance:
-                            if obj_comp['violations']:
-                                # Only count non-whitelisted violations for THIS specific tag rule
-                                for violation in obj_comp['violations']:
-                                    if (not violation.get('is_whitelisted', False) and 
-                                        violation.get('applied_tag_rule_id') == tag_rule['APPLIED_TAG_RULE_ID']):
-                                        violation_count += 1
-                    except Exception as e:
-                        # Log the error for debugging
-                        st.warning(f"Error calculating violations for tag rule: {str(e)}")
-                        violation_count = 0
+                    if not tag_rule_kpi_df.empty:
+                        kpi_row = tag_rule_kpi_df[tag_rule_kpi_df['APPLIED_TAG_RULE_ID'] == tag_rule['APPLIED_TAG_RULE_ID']]
+                        if not kpi_row.empty:
+                            violation_count = int(kpi_row.iloc[0]['TOTAL_VIOLATIONS'])
                     
                     # Build violation count display
                     violation_html = ""
