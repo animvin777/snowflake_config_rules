@@ -889,28 +889,29 @@ def get_wh_compliance_results_paginated(session, search_term=None, status_filter
     """
     # Build base query with CTE for violation parsing
     base_cte = """
-    WITH parsed_data AS (
+    WITH violation_counts AS (
         SELECT 
-            warehouse_name,
-            warehouse_type,
-            warehouse_size,
-            warehouse_owner,
-            violations,
-            compliant_rules,
-            applicable_rules,
-            last_evaluated_at,
-            ARRAY_SIZE(violations) as total_violations,
-            (
-                SELECT COUNT(*)
-                FROM TABLE(FLATTEN(input => violations)) v
-                WHERE v.value:is_whitelisted::BOOLEAN = FALSE
-            ) as non_whitelisted_count,
-            (
-                SELECT COUNT(*)
-                FROM TABLE(FLATTEN(input => violations)) v
-                WHERE v.value:is_whitelisted::BOOLEAN = TRUE
-            ) as whitelisted_count
-        FROM data_schema.warehouse_compliance_results
+            wcr.warehouse_name,
+            COUNT(CASE WHEN v.value:is_whitelisted::BOOLEAN = FALSE THEN 1 END) as non_whitelisted_count,
+            COUNT(CASE WHEN v.value:is_whitelisted::BOOLEAN = TRUE THEN 1 END) as whitelisted_count
+        FROM data_schema.warehouse_compliance_results wcr,
+        LATERAL FLATTEN(input => wcr.violations) v
+        GROUP BY wcr.warehouse_name
+    ),
+    parsed_data AS (
+        SELECT 
+            wcr.warehouse_name,
+            wcr.warehouse_type,
+            wcr.warehouse_size,
+            wcr.warehouse_owner,
+            wcr.violations,
+            wcr.compliant_rules,
+            wcr.applicable_rules,
+            wcr.last_evaluated_at,
+            COALESCE(vc.non_whitelisted_count, 0) as non_whitelisted_count,
+            COALESCE(vc.whitelisted_count, 0) as whitelisted_count
+        FROM data_schema.warehouse_compliance_results wcr
+        LEFT JOIN violation_counts vc ON wcr.warehouse_name = vc.warehouse_name
     )
     """
     
@@ -1004,29 +1005,38 @@ def get_db_compliance_results_paginated(session, object_type=None, search_term=N
     """
     # Build base query with CTE for violation parsing
     base_cte = """
-    WITH parsed_data AS (
+    WITH violation_counts AS (
         SELECT 
-            object_type,
-            database_name,
-            schema_name,
-            table_name,
-            table_type,
-            table_owner,
-            violations,
-            compliant_rules,
-            applicable_rules,
-            last_evaluated_at,
-            (
-                SELECT COUNT(*)
-                FROM TABLE(FLATTEN(input => violations)) v
-                WHERE v.value:is_whitelisted::BOOLEAN = FALSE
-            ) as non_whitelisted_count,
-            (
-                SELECT COUNT(*)
-                FROM TABLE(FLATTEN(input => violations)) v
-                WHERE v.value:is_whitelisted::BOOLEAN = TRUE
-            ) as whitelisted_count
-        FROM data_schema.database_compliance_results
+            dcr.object_type,
+            dcr.database_name,
+            dcr.schema_name,
+            dcr.table_name,
+            COUNT(CASE WHEN v.value:is_whitelisted::BOOLEAN = FALSE THEN 1 END) as non_whitelisted_count,
+            COUNT(CASE WHEN v.value:is_whitelisted::BOOLEAN = TRUE THEN 1 END) as whitelisted_count
+        FROM data_schema.database_compliance_results dcr,
+        LATERAL FLATTEN(input => dcr.violations) v
+        GROUP BY dcr.object_type, dcr.database_name, dcr.schema_name, dcr.table_name
+    ),
+    parsed_data AS (
+        SELECT 
+            dcr.object_type,
+            dcr.database_name,
+            dcr.schema_name,
+            dcr.table_name,
+            dcr.table_type,
+            dcr.table_owner,
+            dcr.violations,
+            dcr.compliant_rules,
+            dcr.applicable_rules,
+            dcr.last_evaluated_at,
+            COALESCE(vc.non_whitelisted_count, 0) as non_whitelisted_count,
+            COALESCE(vc.whitelisted_count, 0) as whitelisted_count
+        FROM data_schema.database_compliance_results dcr
+        LEFT JOIN violation_counts vc ON 
+            dcr.object_type = vc.object_type AND
+            dcr.database_name = vc.database_name AND
+            COALESCE(dcr.schema_name, '') = COALESCE(vc.schema_name, '') AND
+            COALESCE(dcr.table_name, '') = COALESCE(vc.table_name, '')
     )
     """
     
@@ -1128,28 +1138,33 @@ def get_tag_compliance_results_paginated(session, object_type=None, search_term=
     """
     # Build base query with CTE for violation parsing
     base_cte = """
-    WITH parsed_data AS (
+    WITH violation_counts AS (
         SELECT 
-            object_name,
-            object_database,
-            object_schema,
-            object_type,
-            table_type,
-            owner,
-            assigned_tags,
-            violations,
-            last_evaluated_at,
-            (
-                SELECT COUNT(*)
-                FROM TABLE(FLATTEN(input => violations)) v
-                WHERE v.value:is_whitelisted::BOOLEAN = FALSE
-            ) as non_whitelisted_count,
-            (
-                SELECT COUNT(*)
-                FROM TABLE(FLATTEN(input => violations)) v
-                WHERE v.value:is_whitelisted::BOOLEAN = TRUE
-            ) as whitelisted_count
-        FROM data_schema.tag_compliance_results
+            tcr.object_name,
+            tcr.object_type,
+            COUNT(CASE WHEN v.value:is_whitelisted::BOOLEAN = FALSE THEN 1 END) as non_whitelisted_count,
+            COUNT(CASE WHEN v.value:is_whitelisted::BOOLEAN = TRUE THEN 1 END) as whitelisted_count
+        FROM data_schema.tag_compliance_results tcr,
+        LATERAL FLATTEN(input => tcr.violations) v
+        GROUP BY tcr.object_name, tcr.object_type
+    ),
+    parsed_data AS (
+        SELECT 
+            tcr.object_name,
+            tcr.object_database,
+            tcr.object_schema,
+            tcr.object_type,
+            tcr.table_type,
+            tcr.owner,
+            tcr.assigned_tags,
+            tcr.violations,
+            tcr.last_evaluated_at,
+            COALESCE(vc.non_whitelisted_count, 0) as non_whitelisted_count,
+            COALESCE(vc.whitelisted_count, 0) as whitelisted_count
+        FROM data_schema.tag_compliance_results tcr
+        LEFT JOIN violation_counts vc ON 
+            tcr.object_name = vc.object_name AND
+            tcr.object_type = vc.object_type
     )
     """
     
