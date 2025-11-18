@@ -5,9 +5,11 @@ Handles the display of tag compliance status for warehouses, databases, and tabl
 
 import streamlit as st
 import pandas as pd
-from database import get_applied_tag_rules, get_tag_compliance_details, get_all_objects_by_type, get_whitelisted_violations, add_to_whitelist, get_tag_compliance_results
+from database import (get_applied_tag_rules, get_tag_compliance_details, get_all_objects_by_type, 
+                      get_whitelisted_violations, add_to_whitelist, 
+                      get_tag_compliance_results_paginated, get_tag_compliance_metrics)
 from compliance import generate_tag_fix_sql
-from ui_utils import render_refresh_button, render_section_header, render_filter_button
+from ui_utils import render_refresh_button, render_section_header, render_filter_button, render_pagination_controls
 
 
 def render_tag_compliance_tab(session):
@@ -15,6 +17,16 @@ def render_tag_compliance_tab(session):
     # Initialize filter state
     if 'tag_compliance_filter' not in st.session_state:
         st.session_state.tag_compliance_filter = "All Objects"
+    
+    # Initialize pagination state
+    if 'tag_page_size' not in st.session_state:
+        st.session_state.tag_page_size = 10
+    if 'tag_current_page' not in st.session_state:
+        st.session_state.tag_current_page = 0
+    if 'tag_search_term' not in st.session_state:
+        st.session_state.tag_search_term = ""
+    if 'tag_object_type_filter' not in st.session_state:
+        st.session_state.tag_object_type_filter = "WAREHOUSE"
     
     # Refresh button in top right
     col_title, col_refresh = render_refresh_button("tab_tag_compliance")
@@ -32,104 +44,117 @@ def render_tag_compliance_tab(session):
         st.info("No tag rules have been applied yet. Go to the Rule Configuration tab to apply tag rules.")
         return
     
-    # Object type selection
-    col1, col2 = st.columns([1, 3])
+    # Object type selection and search
+    col1, col2, col3 = st.columns([1, 3, 1])
     with col1:
-        object_type_filter = st.selectbox(
+        object_type_input = st.selectbox(
             "Select Object Type",
             ["WAREHOUSE", "DATABASE", "TABLE"],
-            key="tag_object_type_filter"
+            index=["WAREHOUSE", "DATABASE", "TABLE"].index(st.session_state.tag_object_type_filter),
+            key="tag_object_type_input"
         )
     with col2:
-        search_text = st.text_input("Search by object name or tag name", placeholder="Type to search...", key="tag_search")
+        search_input = st.text_input("Search by object name", placeholder="Type object name...", key="tag_search_input", label_visibility="collapsed")
+    with col3:
+        if st.button("Search", key="tag_search_btn", type="primary", use_container_width=True):
+            st.session_state.tag_search_term = search_input
+            st.session_state.tag_object_type_filter = object_type_input
+            st.session_state.tag_current_page = 0  # Reset to first page on new search
     
     # Get tag rules for selected object type
-    object_tag_rules = tag_rules_df[tag_rules_df['OBJECT_TYPE'] == object_type_filter]
+    object_tag_rules = tag_rules_df[tag_rules_df['OBJECT_TYPE'] == st.session_state.tag_object_type_filter]
     
     if object_tag_rules.empty:
-        st.info(f"No tag rules have been applied for {object_type_filter}s yet.")
+        st.info(f"No tag rules have been applied for {st.session_state.tag_object_type_filter}s yet.")
         return
     
-    # Get compliance data from table and filter by object type
+    # Get metrics from database
     try:
-        all_compliance_data = get_tag_compliance_results(session)
-        compliance_data = [obj for obj in all_compliance_data if obj.get('object_type') == object_type_filter]
+        metrics = get_tag_compliance_metrics(session, st.session_state.tag_object_type_filter, st.session_state.tag_compliance_filter.lower())
     except:
-        compliance_data = []
+        metrics = {'total': 0, 'violations': 0, 'compliant': 0, 'whitelisted': 0, 'compliance_rate': 0}
     
-    if not compliance_data:
-        st.warning(f"No compliance data available for {object_type_filter}s. Click 'Run Rules' in the Rule Configuration tab to generate compliance results.")
+    if metrics['total'] == 0:
+        st.warning(f"No compliance data available for {st.session_state.tag_object_type_filter}s. Click 'Run Rules' in the Rule Configuration tab to generate compliance results.")
         return
-    
-    # Calculate summary statistics
-    total_objects = len(compliance_data)
-    # Count non-compliant as objects with non-whitelisted violations
-    non_compliant_objects = sum(1 for obj in compliance_data if any(not v.get('is_whitelisted', False) for v in obj['violations']))
-    compliant_objects = total_objects - non_compliant_objects
-    # Count whitelisted violations across all objects
-    whitelist_count = sum(sum(1 for v in obj['violations'] if v.get('is_whitelisted', False)) for obj in compliance_data)
     
     # Display summary metrics
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        render_filter_button("Total Objects", total_objects, "filter_all_tag_objects_btn", "All Objects", "tag_compliance_filter")
+        render_filter_button("Total Objects", metrics['total'], "filter_all_tag_objects_btn", "All Objects", "tag_compliance_filter")
     
     with col2:
-        render_filter_button("Compliant", compliant_objects, "filter_compliant_tag_objects_btn", "Compliant Only", "tag_compliance_filter")
+        render_filter_button("Compliant", metrics['compliant'], "filter_compliant_tag_objects_btn", "Compliant Only", "tag_compliance_filter")
     
     with col3:
-        render_filter_button("Non-Compliant", non_compliant_objects, "filter_non_compliant_tag_objects_btn", "Non-Compliant Only", "tag_compliance_filter")
+        render_filter_button("Non-Compliant", metrics['violations'], "filter_non_compliant_tag_objects_btn", "Non-Compliant Only", "tag_compliance_filter")
     
     with col4:
-        # Calculate compliance rate
-        compliance_rate = (compliant_objects / total_objects * 100) if total_objects > 0 else 0
-        render_filter_button("Compliance Rate", f"{compliance_rate:.1f}%", "filter_rate_tag_objects_btn", "Non-Compliant First", "tag_compliance_filter")
+        render_filter_button("Compliance Rate", f"{metrics['compliance_rate']:.1f}%", "filter_rate_tag_objects_btn", "Non-Compliant First", "tag_compliance_filter")
     
     with col5:
-        render_filter_button("Whitelisted", whitelist_count, "filter_whitelist_tag_objects_btn", "Whitelisted Only", "tag_compliance_filter")
+        render_filter_button("Whitelisted", metrics['whitelisted'], "filter_whitelist_tag_objects_btn", "Whitelisted Only", "tag_compliance_filter")
     
     st.html("<br>")
     st.markdown("---")
     
+    # Pagination controls
+    offset = st.session_state.tag_current_page * st.session_state.tag_page_size
+    
+    try:
+        compliance_data, total_count = get_tag_compliance_results_paginated(
+            session,
+            object_type=st.session_state.tag_object_type_filter,
+            search_term=st.session_state.tag_search_term if st.session_state.tag_search_term else None,
+            limit=st.session_state.tag_page_size,
+            offset=offset
+        )
+    except Exception as e:
+        st.error(f"Error loading compliance data: {str(e)}")
+        compliance_data, total_count = [], 0
+    
+    # Render pagination controls
+    new_page_size, new_page = render_pagination_controls(
+        total_count,
+        st.session_state.tag_page_size,
+        st.session_state.tag_current_page,
+        "tag_compliance"
+    )
+    
+    # Update session state if pagination changed
+    if new_page_size != st.session_state.tag_page_size or new_page != st.session_state.tag_current_page:
+        st.session_state.tag_page_size = new_page_size
+        st.session_state.tag_current_page = new_page
+        st.rerun()
+    
+    st.markdown("---")
+    
     # Filter compliance data based on status selection
     view_filter = st.session_state.tag_compliance_filter
-    filtered_data = compliance_data.copy()
+    filtered_data = compliance_data
     
     # Sort if "Non-Compliant First" is selected
     if view_filter == "Non-Compliant First":
         filtered_data = sorted(filtered_data, key=lambda x: (len([v for v in x['violations'] if not v.get('is_whitelisted', False)]) == 0, x['object_name']))
     elif view_filter == "Whitelisted Only":
-        # Show only objects with whitelisted violations
         filtered_data = [obj for obj in filtered_data if any(v.get('is_whitelisted', False) for v in obj['violations'])]
     elif view_filter == "Non-Compliant Only":
-        # Show objects with non-whitelisted violations
         filtered_data = [obj for obj in filtered_data if any(not v.get('is_whitelisted', False) for v in obj['violations'])]
     elif view_filter == "Compliant Only":
-        # Show objects with no violations at all
         filtered_data = [obj for obj in filtered_data if not any(not v.get('is_whitelisted', False) for v in obj['violations'])]
-    
-    # Apply search filter
-    if search_text:
-        search_lower = search_text.lower()
-        filtered_data = [
-            obj for obj in filtered_data 
-            if (search_lower in obj['object_name'].lower() 
-                or any(search_lower in tag.lower() for tag in obj.get('assigned_tags', []))
-                or any(search_lower in v.get('tag_name', '').lower() for v in obj.get('violations', [])))
-        ]
     
     # Display results
     if not filtered_data:
         st.info("No objects match the selected filters.")
         return
     
-    st.markdown(f"#### Showing {len(filtered_data)} {object_type_filter}s")
+    st.markdown(f"#### Showing {len(filtered_data)} {st.session_state.tag_object_type_filter}s")
     
     # Determine color scheme based on object type
-    if object_type_filter == "WAREHOUSE":
+    if st.session_state.tag_object_type_filter == "WAREHOUSE":
         card_theme = "warehouse"
-    elif object_type_filter == "DATABASE":
+    elif st.session_state.tag_object_type_filter == "DATABASE":
         card_theme = "database"
     else:  # TABLE
         card_theme = "tag"

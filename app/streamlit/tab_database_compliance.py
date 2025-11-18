@@ -6,9 +6,10 @@ Handles the display of database, schema, and table compliance status and remedia
 import streamlit as st
 import pandas as pd
 from database import (get_database_retention_details, get_applied_rules, execute_sql, 
-                      get_tag_compliance_details, get_whitelisted_violations, add_to_whitelist, get_db_compliance_results)
+                      get_tag_compliance_details, get_whitelisted_violations, add_to_whitelist, 
+                      get_db_compliance_results_paginated, get_db_compliance_metrics)
 from compliance import generate_table_fix_sql
-from ui_utils import render_refresh_button, render_section_header, render_filter_button
+from ui_utils import render_refresh_button, render_section_header, render_filter_button, render_pagination_controls
 
 
 def render_database_compliance_tab(session):
@@ -16,6 +17,16 @@ def render_database_compliance_tab(session):
     # Initialize filter state
     if 'db_compliance_filter' not in st.session_state:
         st.session_state.db_compliance_filter = "All Objects"
+    
+    # Initialize pagination state
+    if 'db_page_size' not in st.session_state:
+        st.session_state.db_page_size = 10
+    if 'db_current_page' not in st.session_state:
+        st.session_state.db_current_page = 0
+    if 'db_search_term' not in st.session_state:
+        st.session_state.db_search_term = ""
+    if 'db_object_type_filter' not in st.session_state:
+        st.session_state.db_object_type_filter = "All"
     
     # Refresh button in top right
     col_title, col_refresh = render_refresh_button("tab_db_compliance")
@@ -34,91 +45,103 @@ def render_database_compliance_tab(session):
         st.info("No database rules have been applied yet. Go to the Rule Configuration tab to apply database rules.")
         return
     
-    # Get compliance data from table instead of calculating
+    # Get metrics from database
+    object_type_for_query = None if st.session_state.db_object_type_filter == "All" else st.session_state.db_object_type_filter
     try:
-        compliance_data = get_db_compliance_results(session)
+        metrics = get_db_compliance_metrics(session, object_type_for_query, st.session_state.db_compliance_filter.lower())
     except:
-        compliance_data = []
+        metrics = {'total': 0, 'violations': 0, 'compliant': 0, 'whitelisted': 0, 'compliance_rate': 0}
     
-    if not compliance_data:
+    if metrics['total'] == 0:
         st.warning("No compliance data available. Click 'Run Rules' in the Rule Configuration tab to generate compliance results.")
         return
-    
-    # Calculate summary statistics by object type
-    total_objects = len(compliance_data)
-    # Count non-compliant as objects with non-whitelisted violations
-    non_compliant_objects = sum(1 for t in compliance_data if any(not v.get('is_whitelisted', False) for v in t['violations']))
-    compliant_objects = total_objects - non_compliant_objects
-    # Count whitelisted violations across all objects
-    whitelist_count = sum(sum(1 for v in t['violations'] if v.get('is_whitelisted', False)) for t in compliance_data)
-    
-    # Count by type
-    databases = sum(1 for t in compliance_data if t['object_type'] == 'DATABASE')
-    schemas = sum(1 for t in compliance_data if t['object_type'] == 'SCHEMA')
-    tables = sum(1 for t in compliance_data if t['object_type'] == 'TABLE')
     
     # Display summary metrics
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        render_filter_button("Total Objects", total_objects, "filter_all_objects_btn", "All Objects", "db_compliance_filter")
+        render_filter_button("Total Objects", metrics['total'], "filter_all_objects_btn", "All Objects", "db_compliance_filter")
     
     with col2:
-        render_filter_button("Compliant", compliant_objects, "filter_compliant_objects_btn", "Compliant Only", "db_compliance_filter")
+        render_filter_button("Compliant", metrics['compliant'], "filter_compliant_objects_btn", "Compliant Only", "db_compliance_filter")
     
     with col3:
-        render_filter_button("Non-Compliant", non_compliant_objects, "filter_non_compliant_objects_btn", "Non-Compliant Only", "db_compliance_filter")
+        render_filter_button("Non-Compliant", metrics['violations'], "filter_non_compliant_objects_btn", "Non-Compliant Only", "db_compliance_filter")
     
     with col4:
-        # Calculate compliance rate
-        compliance_rate = (compliant_objects / total_objects * 100) if total_objects > 0 else 0
-        render_filter_button("Compliance Rate", f"{compliance_rate:.1f}%", "filter_rate_objects_btn", "Non-Compliant First", "db_compliance_filter")
+        render_filter_button("Compliance Rate", f"{metrics['compliance_rate']:.1f}%", "filter_rate_objects_btn", "Non-Compliant First", "db_compliance_filter")
     
     with col5:
-        render_filter_button("Whitelisted", whitelist_count, "filter_whitelist_objects_btn", "Whitelisted Only", "db_compliance_filter")
+        render_filter_button("Whitelisted", metrics['whitelisted'], "filter_whitelist_objects_btn", "Whitelisted Only", "db_compliance_filter")
     
     st.html("<br>")
     
     # Object type filter and search in one row
-    col1, col2 = st.columns([1, 3])
+    col1, col2, col3 = st.columns([1, 3, 1])
     with col1:
-        object_type_filter = st.selectbox(
+        object_type_input = st.selectbox(
             "Filter by Object Type",
             ["All", "DATABASE", "SCHEMA", "TABLE"],
-            key="db_object_type_filter"
+            index=["All", "DATABASE", "SCHEMA", "TABLE"].index(st.session_state.db_object_type_filter),
+            key="db_object_type_input"
         )
     with col2:
-        search_text = st.text_input("Search by database, schema, table, or rule name", placeholder="Type to search...", key="db_search")
+        search_input = st.text_input("Search by name", placeholder="Type database, schema, or table name...", key="db_search_input", label_visibility="collapsed")
+    with col3:
+        if st.button("Search", key="db_search_btn", type="primary", use_container_width=True):
+            st.session_state.db_search_term = search_input
+            st.session_state.db_object_type_filter = object_type_input
+            st.session_state.db_current_page = 0  # Reset to first page on new search
     
     st.markdown("---")
     
-    # Filter compliance data by object type
-    if object_type_filter != "All":
-        filtered_data = [t for t in compliance_data if t['object_type'] == object_type_filter]
-    else:
-        filtered_data = compliance_data
+    # Pagination controls
+    offset = st.session_state.db_current_page * st.session_state.db_page_size
+    object_type_for_query = None if st.session_state.db_object_type_filter == "All" else st.session_state.db_object_type_filter
     
-    # Filter compliance data based on status selection (use session state)
+    try:
+        compliance_data, total_count = get_db_compliance_results_paginated(
+            session,
+            object_type=object_type_for_query,
+            search_term=st.session_state.db_search_term if st.session_state.db_search_term else None,
+            limit=st.session_state.db_page_size,
+            offset=offset
+        )
+    except Exception as e:
+        st.error(f"Error loading compliance data: {str(e)}")
+        compliance_data, total_count = [], 0
+    
+    # Render pagination controls
+    new_page_size, new_page = render_pagination_controls(
+        total_count,
+        st.session_state.db_page_size,
+        st.session_state.db_current_page,
+        "db_compliance"
+    )
+    
+    # Update session state if pagination changed
+    if new_page_size != st.session_state.db_page_size or new_page != st.session_state.db_current_page:
+        st.session_state.db_page_size = new_page_size
+        st.session_state.db_current_page = new_page
+        st.rerun()
+    
+    st.markdown("---")
+    
+    # Filter by view filter
+    
+    # Filter compliance data based on status selection
     view_filter = st.session_state.db_compliance_filter
+    filtered_data = compliance_data
     
     # Sort if "Non-Compliant First" is selected
     if view_filter == "Non-Compliant First":
         filtered_data = sorted(filtered_data, key=lambda x: (len(x['violations']) == 0, str(x.get('database_name', ''))))
+    elif view_filter == "Whitelisted Only":
+        filtered_data = [t for t in filtered_data if any(v.get('is_whitelisted', False) for v in t['violations'])]
     elif view_filter == "Non-Compliant Only":
-        filtered_data = [t for t in filtered_data if t['violations']]
+        filtered_data = [t for t in filtered_data if any(not v.get('is_whitelisted', False) for v in t['violations'])]
     elif view_filter == "Compliant Only":
-        filtered_data = [t for t in filtered_data if not t['violations']]
-    
-    # Apply search filter
-    if search_text:
-        search_lower = search_text.lower()
-        filtered_data = [
-            t for t in filtered_data 
-            if (search_lower in str(t.get('database_name', '')).lower() 
-                or search_lower in str(t.get('schema_name', '')).lower()
-                or search_lower in str(t.get('table_name', '')).lower()
-                or any(search_lower in v.get('rule_name', '').lower() for v in t.get('violations', [])))
-        ]
+        filtered_data = [t for t in filtered_data if not any(not v.get('is_whitelisted', False) for v in t['violations'])]
     
     # Display results
     if not filtered_data:

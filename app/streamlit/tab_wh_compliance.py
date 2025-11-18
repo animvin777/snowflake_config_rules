@@ -6,9 +6,10 @@ Displays warehouse compliance status against applied rules
 import streamlit as st
 import pandas as pd
 from database import (get_applied_rules, get_warehouse_details, execute_sql, get_wh_statement_timeout_default, 
-                      get_tag_compliance_details, get_whitelisted_violations, add_to_whitelist, get_wh_compliance_results)
+                      get_tag_compliance_details, get_whitelisted_violations, add_to_whitelist, 
+                      get_wh_compliance_results_paginated, get_wh_compliance_metrics)
 from compliance import generate_wh_fix_sql, generate_wh_post_fix_update_sql
-from ui_utils import render_refresh_button, render_section_header, render_filter_button, filter_by_search
+from ui_utils import render_refresh_button, render_section_header, render_filter_button, filter_by_search, render_pagination_controls
 
 
 def render_wh_compliance_view_tab(session):
@@ -20,6 +21,14 @@ def render_wh_compliance_view_tab(session):
     # Initialize filter state
     if 'wh_compliance_filter' not in st.session_state:
         st.session_state.wh_compliance_filter = "All Warehouses"
+    
+    # Initialize pagination state
+    if 'wh_page_size' not in st.session_state:
+        st.session_state.wh_page_size = 10
+    if 'wh_current_page' not in st.session_state:
+        st.session_state.wh_current_page = 0
+    if 'wh_search_term' not in st.session_state:
+        st.session_state.wh_search_term = ""
     
     # Refresh button in top right
     col_title, col_refresh = render_refresh_button("tab2")
@@ -35,56 +44,82 @@ def render_wh_compliance_view_tab(session):
     if applied_rules_df.empty:
         st.info("No rules applied yet. Go to 'Rule Configuration' tab to apply rules.")
     else:
-        # Get compliance data from table instead of calculating
+        # Get metrics from database
         try:
-            compliance_data = get_wh_compliance_results(session)
+            metrics = get_wh_compliance_metrics(session, st.session_state.wh_compliance_filter.lower())
         except:
-            compliance_data = []
+            metrics = {'total': 0, 'violations': 0, 'compliant': 0, 'whitelisted': 0, 'compliance_rate': 0}
         
-        if not compliance_data:
+        if metrics['total'] == 0:
             st.warning("No compliance data available. Click 'Run Rules' in the Rule Configuration tab to generate compliance results.")
         else:
-            # Summary metrics
-            total_warehouses = len(compliance_data)
-            # Count non-compliant as warehouses with non-whitelisted violations
-            non_compliant_warehouses = sum(1 for wh in compliance_data if any(not v.get('is_whitelisted', False) for v in wh['violations']))
-            compliant_warehouses = total_warehouses - non_compliant_warehouses
-            compliance_rate = (compliant_warehouses / total_warehouses * 100) if total_warehouses > 0 else 0
-            # Count whitelisted violations across all warehouses
-            whitelist_count = sum(sum(1 for v in wh['violations'] if v.get('is_whitelisted', False)) for wh in compliance_data)
-            
             # Metrics as clickable styled buttons
             col1, col2, col3, col4, col5 = st.columns(5)
             
             with col1:
-                render_filter_button("Total Warehouses", total_warehouses, "filter_all_btn", "All Warehouses", "wh_compliance_filter")
+                render_filter_button("Total Warehouses", metrics['total'], "filter_all_btn", "All Warehouses", "wh_compliance_filter")
             
             with col2:
-                render_filter_button("Compliant", compliant_warehouses, "filter_compliant_btn", "Compliant Only", "wh_compliance_filter")
+                render_filter_button("Compliant", metrics['compliant'], "filter_compliant_btn", "Compliant Only", "wh_compliance_filter")
             
             with col3:
-                render_filter_button("Non-Compliant", non_compliant_warehouses, "filter_non_compliant_btn", "Non-Compliant Only", "wh_compliance_filter")
+                render_filter_button("Non-Compliant", metrics['violations'], "filter_non_compliant_btn", "Non-Compliant Only", "wh_compliance_filter")
             
             with col4:
-                render_filter_button("Compliance Rate", f"{compliance_rate:.1f}%", "filter_rate_btn", "Non-Compliant First", "wh_compliance_filter")
+                render_filter_button("Compliance Rate", f"{metrics['compliance_rate']:.1f}%", "filter_rate_btn", "Non-Compliant First", "wh_compliance_filter")
             
             with col5:
-                render_filter_button("Whitelisted", whitelist_count, "filter_whitelist_btn", "Whitelisted Only", "wh_compliance_filter")
+                render_filter_button("Whitelisted", metrics['whitelisted'], "filter_whitelist_btn", "Whitelisted Only", "wh_compliance_filter")
             
             st.html("<br>")
             
-            # Search box
-            search_term = st.text_input("Search warehouses or rules", placeholder="Type warehouse name or rule name...", key="wh_search")
+            # Search box with button
+            col_search, col_btn = st.columns([4, 1])
+            with col_search:
+                search_input = st.text_input("Search warehouses", placeholder="Type warehouse name...", key="wh_search_input", label_visibility="collapsed")
+            with col_btn:
+                if st.button("Search", key="wh_search_btn", type="primary", use_container_width=True):
+                    st.session_state.wh_search_term = search_input
+                    st.session_state.wh_current_page = 0  # Reset to first page on new search
+            
+            # Pagination controls
+            st.markdown("---")
+            offset = st.session_state.wh_current_page * st.session_state.wh_page_size
+            
+            try:
+                compliance_data, total_count = get_wh_compliance_results_paginated(
+                    session, 
+                    search_term=st.session_state.wh_search_term if st.session_state.wh_search_term else None,
+                    limit=st.session_state.wh_page_size,
+                    offset=offset
+                )
+            except Exception as e:
+                st.error(f"Error loading compliance data: {str(e)}")
+                compliance_data, total_count = [], 0
+            
+            # Render pagination controls
+            new_page_size, new_page = render_pagination_controls(
+                total_count, 
+                st.session_state.wh_page_size,
+                st.session_state.wh_current_page,
+                "wh_compliance"
+            )
+            
+            # Update session state if pagination changed
+            if new_page_size != st.session_state.wh_page_size or new_page != st.session_state.wh_current_page:
+                st.session_state.wh_page_size = new_page_size
+                st.session_state.wh_current_page = new_page
+                st.rerun()
             
             st.markdown("---")
             
             # Display warehouse compliance in tile view
-            _render_tile_view(session, compliance_data, st.session_state.wh_compliance_filter, search_term)
+            _render_tile_view(session, compliance_data, st.session_state.wh_compliance_filter)
 
 
 
 
-def _render_tile_view(session, compliance_data, view_filter, search_term=""):
+def _render_tile_view(session, compliance_data, view_filter):
     """Render tile view of warehouse compliance"""
     # Sort data if "Non-Compliant First" is selected
     if view_filter == "Non-Compliant First":
@@ -98,15 +133,6 @@ def _render_tile_view(session, compliance_data, view_filter, search_term=""):
         
         has_violations = len(non_whitelisted_violations) > 0
         warehouse_name = wh_comp['warehouse_name']
-        
-        # Apply search filter
-        if search_term:
-            search_lower = search_term.lower()
-            # Search in warehouse name and rule names
-            rule_names = [v['rule_name'].lower() for v in all_violations]
-            if (search_lower not in warehouse_name.lower() and 
-                not any(search_lower in rule for rule in rule_names)):
-                continue
         
         # Apply status filter
         if view_filter == "Whitelisted Only":
