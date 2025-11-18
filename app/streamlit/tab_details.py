@@ -1,9 +1,10 @@
 """
 Details Tab
-Displays data from all tables in the data_schema
+Displays data from all tables in the data_schema and allows custom SQL queries
 """
 
 import streamlit as st
+import pandas as pd
 from ui_utils import render_refresh_button, render_section_header, render_count_metric
 
 
@@ -20,7 +21,7 @@ def render_details_tab(session):
     
     st.markdown("""
     Explore all configuration data collected by the application. View warehouse configurations, 
-    retention policies, active rules, and task execution details.
+    retention policies, active rules, and task execution details. Execute custom SQL queries to analyze your data.
     """)
     
     st.markdown("---")
@@ -229,3 +230,113 @@ def render_details_tab(session):
     with col6:
         render_count_metric(session, "SELECT COUNT(*) as cnt FROM data_schema.rule_whitelist WHERE is_active = TRUE", "Whitelisted Violations")
 
+    # Custom SQL Query Section
+    st.markdown("---")
+    render_section_header("Custom SQL Query", "chart-icon")
+    
+    st.markdown("""
+    Execute custom SQL queries against your Snowflake account. 
+    View results in a table format or see error messages if the query fails.
+    """)
+    
+    # Initialize session state for query results
+    if 'query_result' not in st.session_state:
+        st.session_state.query_result = None
+    if 'query_error' not in st.session_state:
+        st.session_state.query_error = None
+    
+    # SQL Query input
+    query = st.text_area(
+        "Enter your SQL query:",
+        placeholder="SELECT * FROM INFORMATION_SCHEMA.DATABASES LIMIT 10;",
+        height=150,
+        key="sql_query_input"
+    )
+    
+    # Execute button
+    col1, col2, col3 = st.columns([1, 1, 4])
+    with col1:
+        if st.button("Execute Query", key="execute_query_btn", type="primary"):
+            if query.strip():
+                try:
+                    # Execute the query
+                    result = session.sql(query).collect()
+                    
+                    # Convert to pandas DataFrame for display
+                    if result:
+                        st.session_state.query_result = pd.DataFrame(result)
+                        st.session_state.query_error = None
+                    else:
+                        st.session_state.query_result = pd.DataFrame()
+                        st.session_state.query_error = None
+                        
+                except Exception as e:
+                    st.session_state.query_error = str(e)
+                    st.session_state.query_result = None
+            else:
+                st.session_state.query_error = "Please enter a query to execute."
+                st.session_state.query_result = None
+    
+    with col2:
+        if st.button("Clear Results", key="clear_results_btn", type="secondary"):
+            st.session_state.query_result = None
+            st.session_state.query_error = None
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Display results or errors
+    if st.session_state.query_error:
+        st.error(f"**Query Error:**\n\n{st.session_state.query_error}")
+    
+    if st.session_state.query_result is not None:
+        if not st.session_state.query_result.empty:
+            st.success(f"Query returned {len(st.session_state.query_result)} rows")
+            
+            # Display dataframe with scrolling
+            st.dataframe(
+                st.session_state.query_result,
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # Add download button
+            csv = st.session_state.query_result.to_csv(index=False)
+            st.download_button(
+                label="Download Results as CSV",
+                data=csv,
+                file_name="query_results.csv",
+                mime="text/csv",
+                key="download_csv_btn"
+            )
+        else:
+            st.info("Query executed successfully but returned no results.")
+    
+    # Add helpful examples
+    with st.expander("Example Queries"):
+        st.markdown("""
+        **List all databases:**
+        ```sql
+        SHOW DATABASES;
+        ```
+        
+        **List all warehouses:**
+        ```sql
+        SHOW WAREHOUSES;
+        ```
+        
+        **View warehouse configurations:**
+        ```sql
+        SELECT * FROM DATA_SCHEMA.WAREHOUSE_DETAILS LIMIT 10;
+        ```
+        
+        **View applied rules:**
+        ```sql
+        SELECT * FROM DATA_SCHEMA.APPLIED_RULES;
+        ```
+        
+        **View database retention policies:**
+        ```sql
+        SELECT * FROM DATA_SCHEMA.DATABASE_RETENTION_DETAILS LIMIT 10;
+        ```
+        """)

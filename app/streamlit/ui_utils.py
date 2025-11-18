@@ -225,4 +225,62 @@ def render_rule_card(rule, rule_type_class, rule_type_icon, violation_count=None
     """)
 
 
+def render_pagination_controls(total_count, page_size, current_page, key_prefix):
+    """Render pagination controls with page size selector and navigation
+    
+    Args:
+        total_count: Total number of items
+        page_size: Current page size
+        current_page: Current page number (0-indexed)
+        key_prefix: Unique prefix for widget keys
+    
+    Returns:
+        tuple: (new_page_size, new_page_number)
+    """
+    total_pages = max(1, (total_count + page_size - 1) // page_size)  # Ceiling division
+    current_page = min(current_page, total_pages - 1)  # Ensure page is valid
+    
+    col1, col2, col3, col4 = st.columns([2, 2, 3, 3])
+    
+    with col1:
+        page_size_options = [10, 25, 50, 100]
+        new_page_size = st.selectbox(
+            "Items per page",
+            options=page_size_options,
+            index=page_size_options.index(page_size) if page_size in page_size_options else 0,
+            key=f"{key_prefix}_page_size"
+        )
+    
+    with col2:
+        st.html(f"""
+            <div style="margin-top: 1.8rem; color: #666;">
+                Page {current_page + 1} of {total_pages} ({total_count} total)
+            </div>
+        """)
+    
+    with col3:
+        page_col1, page_col2, page_col3, page_col4 = st.columns(4)
+        
+        with page_col1:
+            if st.button("⏮", key=f"{key_prefix}_first", disabled=current_page == 0, help="First page"):
+                return new_page_size, 0
+        
+        with page_col2:
+            if st.button("◀", key=f"{key_prefix}_prev", disabled=current_page == 0, help="Previous page"):
+                return new_page_size, max(0, current_page - 1)
+        
+        with page_col3:
+            if st.button("▶", key=f"{key_prefix}_next", disabled=current_page >= total_pages - 1, help="Next page"):
+                return new_page_size, min(total_pages - 1, current_page + 1)
+        
+        with page_col4:
+            if st.button("⏭", key=f"{key_prefix}_last", disabled=current_page >= total_pages - 1, help="Last page"):
+                return new_page_size, total_pages - 1
+    
+    # If page size changed, reset to page 0
+    if new_page_size != page_size:
+        return new_page_size, 0
+    
+    return page_size, current_page
+
 

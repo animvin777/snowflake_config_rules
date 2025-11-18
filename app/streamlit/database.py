@@ -671,7 +671,7 @@ def save_db_compliance_results(session, compliance_data):
         session: Snowflake session
         compliance_data: List of dictionaries with compliance information
     """
-    
+
     if not compliance_data:
         return
     
@@ -870,6 +870,388 @@ def get_tag_compliance_results(session):
     return compliance_data
 
 
+# ===================================
+# PAGINATED COMPLIANCE QUERY FUNCTIONS
+# ===================================
+
+def get_wh_compliance_results_paginated(session, search_term=None, limit=10, offset=0):
+    """Retrieve warehouse compliance results with pagination and optional search
+    
+    Args:
+        session: Snowflake session
+        search_term: Optional warehouse name search filter
+        limit: Number of records to return
+        offset: Number of records to skip
+    
+    Returns:
+        tuple: (List of dictionaries with compliance information, total_count)
+    """
+    # Build WHERE clause for search
+    where_clause = ""
+    if search_term:
+        where_clause = f"WHERE warehouse_name ILIKE '%{search_term}%'"
+    
+    # Get total count
+    count_query = f"""
+    SELECT COUNT(*) as total
+    FROM data_schema.warehouse_compliance_results
+    {where_clause}
+    """
+    total_count = session.sql(count_query).to_pandas().iloc[0]['TOTAL']
+    
+    # Get paginated data
+    query = f"""
+    SELECT 
+        warehouse_name,
+        warehouse_type,
+        warehouse_size,
+        warehouse_owner,
+        violations,
+        compliant_rules,
+        applicable_rules,
+        last_evaluated_at
+    FROM data_schema.warehouse_compliance_results
+    {where_clause}
+    ORDER BY warehouse_name
+    LIMIT {limit} OFFSET {offset}
+    """
+    df = session.sql(query).to_pandas()
+    
+    # Convert to list of dictionaries matching the original format
+    compliance_data = []
+    for _, row in df.iterrows():
+        def parse_json_field(field_value):
+            if not field_value:
+                return []
+            if isinstance(field_value, str):
+                return json.loads(field_value)
+            elif isinstance(field_value, list):
+                return field_value
+            else:
+                return []
+        
+        violations = parse_json_field(row['VIOLATIONS'])
+        compliant_rules = parse_json_field(row['COMPLIANT_RULES'])
+        applicable_rules = parse_json_field(row['APPLICABLE_RULES'])
+        
+        compliance_data.append({
+            'warehouse_name': row['WAREHOUSE_NAME'],
+            'warehouse_type': row['WAREHOUSE_TYPE'],
+            'warehouse_size': row['WAREHOUSE_SIZE'],
+            'warehouse_owner': row['WAREHOUSE_OWNER'],
+            'violations': violations,
+            'compliant_rules': compliant_rules,
+            'applicable_rules': applicable_rules
+        })
+    
+    return compliance_data, total_count
+
+
+def get_db_compliance_results_paginated(session, object_type=None, search_term=None, limit=10, offset=0):
+    """Retrieve database/schema/table compliance results with pagination and optional search
+    
+    Args:
+        session: Snowflake session
+        object_type: Filter by object type ('DATABASE', 'SCHEMA', 'TABLE')
+        search_term: Optional object name search filter
+        limit: Number of records to return
+        offset: Number of records to skip
+    
+    Returns:
+        tuple: (List of dictionaries with compliance information, total_count)
+    """
+    # Build WHERE clause
+    where_clauses = []
+    if object_type:
+        where_clauses.append(f"object_type = '{object_type}'")
+    if search_term:
+        where_clauses.append(f"(database_name ILIKE '%{search_term}%' OR schema_name ILIKE '%{search_term}%' OR table_name ILIKE '%{search_term}%')")
+    
+    where_clause = ""
+    if where_clauses:
+        where_clause = "WHERE " + " AND ".join(where_clauses)
+    
+    # Get total count
+    count_query = f"""
+    SELECT COUNT(*) as total
+    FROM data_schema.database_compliance_results
+    {where_clause}
+    """
+    total_count = session.sql(count_query).to_pandas().iloc[0]['TOTAL']
+    
+    # Get paginated data
+    query = f"""
+    SELECT 
+        object_type,
+        database_name,
+        schema_name,
+        table_name,
+        table_type,
+        table_owner,
+        violations,
+        compliant_rules,
+        applicable_rules,
+        last_evaluated_at
+    FROM data_schema.database_compliance_results
+    {where_clause}
+    ORDER BY object_type, database_name, schema_name, table_name
+    LIMIT {limit} OFFSET {offset}
+    """
+    df = session.sql(query).to_pandas()
+    
+    # Convert to list of dictionaries matching the original format
+    compliance_data = []
+    for _, row in df.iterrows():
+        def parse_json_field(field_value):
+            if not field_value:
+                return []
+            if isinstance(field_value, str):
+                return json.loads(field_value)
+            elif isinstance(field_value, list):
+                return field_value
+            else:
+                return []
+        
+        violations = parse_json_field(row['VIOLATIONS'])
+        compliant_rules = parse_json_field(row['COMPLIANT_RULES'])
+        applicable_rules = parse_json_field(row['APPLICABLE_RULES'])
+        
+        compliance_data.append({
+            'object_type': row['OBJECT_TYPE'],
+            'database_name': row['DATABASE_NAME'],
+            'schema_name': row['SCHEMA_NAME'],
+            'table_name': row['TABLE_NAME'],
+            'table_type': row['TABLE_TYPE'],
+            'table_owner': row['TABLE_OWNER'],
+            'violations': violations,
+            'compliant_rules': compliant_rules,
+            'applicable_rules': applicable_rules
+        })
+    
+    return compliance_data, total_count
+
+
+def get_tag_compliance_results_paginated(session, object_type=None, search_term=None, limit=10, offset=0):
+    """Retrieve tag compliance results with pagination and optional search
+    
+    Args:
+        session: Snowflake session
+        object_type: Filter by object type ('WAREHOUSE', 'DATABASE', 'TABLE')
+        search_term: Optional object name search filter
+        limit: Number of records to return
+        offset: Number of records to skip
+    
+    Returns:
+        tuple: (List of dictionaries with compliance information, total_count)
+    """
+    # Build WHERE clause
+    where_clauses = []
+    if object_type:
+        where_clauses.append(f"object_type = '{object_type}'")
+    if search_term:
+        where_clauses.append(f"object_name ILIKE '%{search_term}%'")
+    
+    where_clause = ""
+    if where_clauses:
+        where_clause = "WHERE " + " AND ".join(where_clauses)
+    
+    # Get total count
+    count_query = f"""
+    SELECT COUNT(*) as total
+    FROM data_schema.tag_compliance_results
+    {where_clause}
+    """
+    total_count = session.sql(count_query).to_pandas().iloc[0]['TOTAL']
+    
+    # Get paginated data
+    query = f"""
+    SELECT 
+        object_name,
+        object_database,
+        object_schema,
+        object_type,
+        table_type,
+        owner,
+        assigned_tags,
+        violations,
+        last_evaluated_at
+    FROM data_schema.tag_compliance_results
+    {where_clause}
+    ORDER BY object_type, object_name
+    LIMIT {limit} OFFSET {offset}
+    """
+    df = session.sql(query).to_pandas()
+    
+    # Convert to list of dictionaries matching the original format
+    compliance_data = []
+    for _, row in df.iterrows():
+        def parse_json_field(field_value):
+            if not field_value:
+                return []
+            if isinstance(field_value, str):
+                return json.loads(field_value)
+            elif isinstance(field_value, list):
+                return field_value
+            else:
+                return []
+        
+        assigned_tags = parse_json_field(row['ASSIGNED_TAGS'])
+        violations = parse_json_field(row['VIOLATIONS'])
+        
+        compliance_data.append({
+            'object_name': row['OBJECT_NAME'],
+            'object_database': row['OBJECT_DATABASE'],
+            'object_schema': row['OBJECT_SCHEMA'],
+            'object_type': row['OBJECT_TYPE'],
+            'table_type': row['TABLE_TYPE'],
+            'owner': row['OWNER'],
+            'assigned_tags': assigned_tags,
+            'violations': violations
+        })
+    
+    return compliance_data, total_count
+
+
+# ===================================
+# METRIC/KPI QUERY FUNCTIONS
+# ===================================
+
+def get_wh_compliance_metrics(session, filter_type='all'):
+    """Get warehouse compliance metrics from database
+    
+    Args:
+        session: Snowflake session
+        filter_type: 'all', 'violations', or 'whitelisted'
+    
+    Returns:
+        dict: Metrics including total, violations, compliant, whitelisted counts
+    """
+    query = """
+    SELECT 
+        COUNT(*) as total_warehouses,
+        SUM(CASE WHEN ARRAY_SIZE(violations) > 0 THEN 1 ELSE 0 END) as warehouses_with_violations,
+        SUM(CASE WHEN ARRAY_SIZE(violations) = 0 THEN 1 ELSE 0 END) as compliant_warehouses
+    FROM data_schema.warehouse_compliance_results
+    """
+    result = session.sql(query).to_pandas().iloc[0]
+    
+    # Get whitelisted count
+    whitelist_query = """
+    SELECT COUNT(DISTINCT object_name) as whitelisted_count
+    FROM data_schema.rule_whitelist
+    WHERE object_type = 'WAREHOUSE' AND is_active = TRUE
+    """
+    whitelisted = session.sql(whitelist_query).to_pandas().iloc[0]['WHITELISTED_COUNT']
+    
+    total = result['TOTAL_WAREHOUSES']
+    violations = result['WAREHOUSES_WITH_VIOLATIONS']
+    compliant = result['COMPLIANT_WAREHOUSES']
+    
+    return {
+        'total': total,
+        'violations': violations,
+        'compliant': compliant,
+        'whitelisted': whitelisted,
+        'compliance_rate': (compliant / total * 100) if total > 0 else 0
+    }
+
+
+def get_db_compliance_metrics(session, object_type=None, filter_type='all'):
+    """Get database/table compliance metrics from database
+    
+    Args:
+        session: Snowflake session
+        object_type: Filter by object type ('DATABASE', 'SCHEMA', 'TABLE')
+        filter_type: 'all', 'violations', or 'whitelisted'
+    
+    Returns:
+        dict: Metrics including total, violations, compliant, whitelisted counts
+    """
+    where_clause = f"WHERE object_type = '{object_type}'" if object_type else ""
+    
+    query = f"""
+    SELECT 
+        COUNT(*) as total_objects,
+        SUM(CASE WHEN ARRAY_SIZE(violations) > 0 THEN 1 ELSE 0 END) as objects_with_violations,
+        SUM(CASE WHEN ARRAY_SIZE(violations) = 0 THEN 1 ELSE 0 END) as compliant_objects
+    FROM data_schema.database_compliance_results
+    {where_clause}
+    """
+    result = session.sql(query).to_pandas().iloc[0]
+    
+    # Get whitelisted count
+    whitelist_where = "object_type IN ('DATABASE', 'SCHEMA', 'TABLE')"
+    if object_type:
+        whitelist_where = f"object_type = '{object_type}'"
+    
+    whitelist_query = f"""
+    SELECT COUNT(DISTINCT object_name) as whitelisted_count
+    FROM data_schema.rule_whitelist
+    WHERE {whitelist_where} AND is_active = TRUE
+    """
+    whitelisted = session.sql(whitelist_query).to_pandas().iloc[0]['WHITELISTED_COUNT']
+    
+    total = result['TOTAL_OBJECTS']
+    violations = result['OBJECTS_WITH_VIOLATIONS']
+    compliant = result['COMPLIANT_OBJECTS']
+    
+    return {
+        'total': total,
+        'violations': violations,
+        'compliant': compliant,
+        'whitelisted': whitelisted,
+        'compliance_rate': (compliant / total * 100) if total > 0 else 0
+    }
+
+
+def get_tag_compliance_metrics(session, object_type=None, filter_type='all'):
+    """Get tag compliance metrics from database
+    
+    Args:
+        session: Snowflake session
+        object_type: Filter by object type ('WAREHOUSE', 'DATABASE', 'TABLE')
+        filter_type: 'all', 'violations', or 'whitelisted'
+    
+    Returns:
+        dict: Metrics including total, violations, compliant, whitelisted counts
+    """
+    where_clause = f"WHERE object_type = '{object_type}'" if object_type else ""
+    
+    query = f"""
+    SELECT 
+        COUNT(*) as total_objects,
+        SUM(CASE WHEN ARRAY_SIZE(violations) > 0 THEN 1 ELSE 0 END) as objects_with_violations,
+        SUM(CASE WHEN ARRAY_SIZE(violations) = 0 THEN 1 ELSE 0 END) as compliant_objects
+    FROM data_schema.tag_compliance_results
+    {where_clause}
+    """
+    result = session.sql(query).to_pandas().iloc[0]
+    
+    # Get whitelisted count for tag compliance
+    whitelist_where = "rule_id = 'MISSING_TAG_VALUE'"
+    if object_type:
+        whitelist_where += f" AND object_type = '{object_type}'"
+    
+    whitelist_query = f"""
+    SELECT COUNT(DISTINCT CONCAT(object_name, '|', COALESCE(tag_name, ''))) as whitelisted_count
+    FROM data_schema.rule_whitelist
+    WHERE {whitelist_where} AND is_active = TRUE
+    """
+    whitelisted = session.sql(whitelist_query).to_pandas().iloc[0]['WHITELISTED_COUNT']
+    
+    total = result['TOTAL_OBJECTS']
+    violations = result['OBJECTS_WITH_VIOLATIONS']
+    compliant = result['COMPLIANT_OBJECTS']
+    
+    return {
+        'total': total,
+        'violations': violations,
+        'compliant': compliant,
+        'whitelisted': whitelisted,
+        'compliance_rate': (compliant / total * 100) if total > 0 else 0
+    }
+
+
 def run_all_compliance_checks(session):
     """Run all compliance checks and save results to tables
     
@@ -926,6 +1308,10 @@ def run_all_compliance_checks(session):
             if all_tag_compliance:
                 save_tag_compliance_results(session, all_tag_compliance)
         
+        # Calculate and save KPI metrics
+        save_rule_kpi_results(session, applied_rules_df, whitelist_df)
+        save_tag_rule_kpi_results(session, applied_tag_rules_df, whitelist_df)
+        
         summary['success'] = True
         
     except Exception as e:
@@ -933,3 +1319,191 @@ def run_all_compliance_checks(session):
         summary['success'] = False
     
     return summary
+
+
+# ===================================
+# KPI/METRICS SAVE AND RETRIEVE FUNCTIONS
+# ===================================
+
+def save_rule_kpi_results(session, applied_rules_df, whitelist_df):
+    """Calculate and save KPI metrics for applied rules
+    
+    Args:
+        session: Snowflake session
+        applied_rules_df: DataFrame of applied rules
+        whitelist_df: DataFrame of whitelisted violations
+    """
+    # Truncate existing data
+    session.sql("TRUNCATE TABLE data_schema.rule_kpi_results").collect()
+    
+    if applied_rules_df.empty:
+        return
+    
+    # Calculate metrics for each applied rule
+    for _, rule in applied_rules_df.iterrows():
+        applied_rule_id = rule['APPLIED_RULE_ID']
+        rule_id = rule['RULE_ID']
+        rule_type = rule['RULE_TYPE']
+        
+        if rule_type == 'Warehouse':
+            # Get warehouse compliance data
+            query = f"""
+            SELECT 
+                COUNT(*) as total_evaluated,
+                SUM(CASE WHEN ARRAY_SIZE(violations) > 0 THEN 1 ELSE 0 END) as total_violations,
+                SUM(CASE WHEN ARRAY_SIZE(violations) = 0 THEN 1 ELSE 0 END) as total_compliant
+            FROM data_schema.warehouse_compliance_results
+            """
+        else:  # Database
+            query = f"""
+            SELECT 
+                COUNT(*) as total_evaluated,
+                SUM(CASE WHEN ARRAY_SIZE(violations) > 0 THEN 1 ELSE 0 END) as total_violations,
+                SUM(CASE WHEN ARRAY_SIZE(violations) = 0 THEN 1 ELSE 0 END) as total_compliant
+            FROM data_schema.database_compliance_results
+            """
+        
+        result = session.sql(query).to_pandas().iloc[0]
+        total_evaluated = result['TOTAL_EVALUATED']
+        total_violations = result['TOTAL_VIOLATIONS']
+        total_compliant = result['TOTAL_COMPLIANT']
+        
+        # Get whitelisted count for this specific rule
+        whitelist_count = len(whitelist_df[
+            (whitelist_df['RULE_ID'] == rule_id) & 
+            (whitelist_df['APPLIED_RULE_ID'] == applied_rule_id) &
+            (whitelist_df['IS_ACTIVE'] == True)
+        ]) if not whitelist_df.empty else 0
+        
+        compliance_rate = (total_compliant / total_evaluated * 100) if total_evaluated > 0 else 0
+        
+        # Insert KPI data
+        insert_query = f"""
+        INSERT INTO data_schema.rule_kpi_results 
+            (applied_rule_id, rule_id, rule_type, total_objects_evaluated, total_violations, 
+             total_compliant, total_whitelisted, compliance_rate)
+        VALUES 
+            ({applied_rule_id}, '{rule_id}', '{rule_type}', {total_evaluated}, {total_violations}, 
+             {total_compliant}, {whitelist_count}, {compliance_rate})
+        """
+        session.sql(insert_query).collect()
+
+
+def save_tag_rule_kpi_results(session, applied_tag_rules_df, whitelist_df):
+    """Calculate and save KPI metrics for tag rules
+    
+    Args:
+        session: Snowflake session
+        applied_tag_rules_df: DataFrame of applied tag rules
+        whitelist_df: DataFrame of whitelisted violations
+    """
+    # Truncate existing data
+    session.sql("TRUNCATE TABLE data_schema.tag_rule_kpi_results").collect()
+    
+    if applied_tag_rules_df.empty:
+        return
+    
+    # Calculate metrics for each applied tag rule
+    for _, rule in applied_tag_rules_df.iterrows():
+        applied_tag_rule_id = rule['APPLIED_TAG_RULE_ID']
+        tag_name = rule['TAG_NAME']
+        object_type = rule['OBJECT_TYPE']
+        
+        # Get tag compliance data
+        query = f"""
+        SELECT 
+            COUNT(*) as total_evaluated,
+            SUM(CASE WHEN ARRAY_SIZE(violations) > 0 THEN 1 ELSE 0 END) as total_violations,
+            SUM(CASE WHEN ARRAY_SIZE(violations) = 0 THEN 1 ELSE 0 END) as total_compliant
+        FROM data_schema.tag_compliance_results
+        WHERE object_type = '{object_type}'
+        """
+        
+        result = session.sql(query).to_pandas().iloc[0]
+        total_evaluated = result['TOTAL_EVALUATED']
+        total_violations = result['TOTAL_VIOLATIONS']
+        total_compliant = result['TOTAL_COMPLIANT']
+        
+        # Get whitelisted count for this specific tag rule
+        whitelist_count = len(whitelist_df[
+            (whitelist_df['RULE_ID'] == 'MISSING_TAG_VALUE') & 
+            (whitelist_df['TAG_NAME'] == tag_name) &
+            (whitelist_df['OBJECT_TYPE'] == object_type) &
+            (whitelist_df['IS_ACTIVE'] == True)
+        ]) if not whitelist_df.empty else 0
+        
+        compliance_rate = (total_compliant / total_evaluated * 100) if total_evaluated > 0 else 0
+        
+        # Escape single quotes in tag name
+        tag_name_escaped = tag_name.replace("'", "''")
+        
+        # Insert KPI data
+        insert_query = f"""
+        INSERT INTO data_schema.tag_rule_kpi_results 
+            (applied_tag_rule_id, tag_name, object_type, total_objects_evaluated, total_violations, 
+             total_compliant, total_whitelisted, compliance_rate)
+        VALUES 
+            ({applied_tag_rule_id}, '{tag_name_escaped}', '{object_type}', {total_evaluated}, {total_violations}, 
+             {total_compliant}, {whitelist_count}, {compliance_rate})
+        """
+        session.sql(insert_query).collect()
+
+
+def get_rule_kpi_results(session, applied_rule_id=None):
+    """Retrieve KPI metrics for applied rules
+    
+    Args:
+        session: Snowflake session
+        applied_rule_id: Optional filter by specific applied rule
+    
+    Returns:
+        DataFrame with KPI metrics
+    """
+    where_clause = f"WHERE applied_rule_id = {applied_rule_id}" if applied_rule_id else ""
+    
+    query = f"""
+    SELECT 
+        applied_rule_id,
+        rule_id,
+        rule_type,
+        total_objects_evaluated,
+        total_violations,
+        total_compliant,
+        total_whitelisted,
+        compliance_rate,
+        last_evaluated_at
+    FROM data_schema.rule_kpi_results
+    {where_clause}
+    ORDER BY rule_type, rule_id
+    """
+    return session.sql(query).to_pandas()
+
+
+def get_tag_rule_kpi_results(session, applied_tag_rule_id=None):
+    """Retrieve KPI metrics for tag rules
+    
+    Args:
+        session: Snowflake session
+        applied_tag_rule_id: Optional filter by specific applied tag rule
+    
+    Returns:
+        DataFrame with KPI metrics
+    """
+    where_clause = f"WHERE applied_tag_rule_id = {applied_tag_rule_id}" if applied_tag_rule_id else ""
+    
+    query = f"""
+    SELECT 
+        applied_tag_rule_id,
+        tag_name,
+        object_type,
+        total_objects_evaluated,
+        total_violations,
+        total_compliant,
+        total_whitelisted,
+        compliance_rate,
+        last_evaluated_at
+    FROM data_schema.tag_rule_kpi_results
+    {where_clause}
+    ORDER BY object_type, tag_name
+    """
+    return session.sql(query).to_pandas()

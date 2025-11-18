@@ -174,6 +174,36 @@ CREATE TABLE IF NOT EXISTS data_schema.tag_compliance_results (
 );
 
 
+-- Create table to store KPI/metrics data for applied rules
+CREATE TABLE IF NOT EXISTS data_schema.rule_kpi_results (
+    applied_rule_id NUMBER(38,0),
+    rule_id VARCHAR(100),
+    rule_type VARCHAR(50),  -- 'Warehouse', 'Database'
+    total_objects_evaluated NUMBER(38,0) DEFAULT 0,
+    total_violations NUMBER(38,0) DEFAULT 0,
+    total_compliant NUMBER(38,0) DEFAULT 0,
+    total_whitelisted NUMBER(38,0) DEFAULT 0,
+    compliance_rate FLOAT,
+    last_evaluated_at TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+    CONSTRAINT fk_kpi_applied_rule FOREIGN KEY (applied_rule_id) REFERENCES data_schema.applied_rules(applied_rule_id)
+);
+
+
+-- Create table to store KPI/metrics data for tag rules
+CREATE TABLE IF NOT EXISTS data_schema.tag_rule_kpi_results (
+    applied_tag_rule_id NUMBER(38,0),
+    tag_name VARCHAR(255),
+    object_type VARCHAR(50),  -- 'WAREHOUSE', 'DATABASE', 'TABLE'
+    total_objects_evaluated NUMBER(38,0) DEFAULT 0,
+    total_violations NUMBER(38,0) DEFAULT 0,
+    total_compliant NUMBER(38,0) DEFAULT 0,
+    total_whitelisted NUMBER(38,0) DEFAULT 0,
+    compliance_rate FLOAT,
+    last_evaluated_at TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+    CONSTRAINT fk_tag_kpi_applied_rule FOREIGN KEY (applied_tag_rule_id) REFERENCES data_schema.applied_tag_rules(applied_tag_rule_id)
+);
+
+
 -- Insert predefined configuration rules for warehouses
 INSERT INTO data_schema.config_rules (rule_id, rule_name, rule_description, rule_type, check_parameter, comparison_operator, unit, default_threshold, allow_threshold_override, has_fix_button, has_fix_sql)
 SELECT 'MAX_STATEMENT_TIMEOUT', 'Max Statement Timeout in Seconds', 'Maximum allowed statement timeout for warehouses', 'Warehouse', 'STATEMENT_TIMEOUT_IN_SECONDS', 'MAX', 'seconds', 300, TRUE, TRUE, TRUE
@@ -447,3 +477,5 @@ GRANT ALL ON TABLE data_schema.rule_whitelist TO APPLICATION ROLE config_rules_a
 GRANT ALL ON TABLE data_schema.warehouse_compliance_results TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.database_compliance_results TO APPLICATION ROLE config_rules_admin;
 GRANT ALL ON TABLE data_schema.tag_compliance_results TO APPLICATION ROLE config_rules_admin;
+GRANT ALL ON TABLE data_schema.rule_kpi_results TO APPLICATION ROLE config_rules_admin;
+GRANT ALL ON TABLE data_schema.tag_rule_kpi_results TO APPLICATION ROLE config_rules_admin;
