@@ -44,30 +44,6 @@ def render_tag_compliance_tab(session):
         st.info("No tag rules have been applied yet. Go to the Rule Configuration tab to apply tag rules.")
         return
     
-    # Object type selection and search
-    col1, col2, col3 = st.columns([1, 3, 1])
-    with col1:
-        object_type_input = st.selectbox(
-            "Select Object Type",
-            ["WAREHOUSE", "DATABASE", "TABLE"],
-            index=["WAREHOUSE", "DATABASE", "TABLE"].index(st.session_state.tag_object_type_filter),
-            key="tag_object_type_input"
-        )
-    with col2:
-        search_input = st.text_input("Search by object name", placeholder="Type object name...", key="tag_search_input", label_visibility="collapsed")
-    with col3:
-        if st.button("Search", key="tag_search_btn", type="primary", use_container_width=True):
-            st.session_state.tag_search_term = search_input
-            st.session_state.tag_object_type_filter = object_type_input
-            st.session_state.tag_current_page = 0  # Reset to first page on new search
-    
-    # Get tag rules for selected object type
-    object_tag_rules = tag_rules_df[tag_rules_df['OBJECT_TYPE'] == st.session_state.tag_object_type_filter]
-    
-    if object_tag_rules.empty:
-        st.info(f"No tag rules have been applied for {st.session_state.tag_object_type_filter}s yet.")
-        return
-    
     # Get metrics from database
     try:
         metrics = get_tag_compliance_metrics(session, st.session_state.tag_object_type_filter, st.session_state.tag_compliance_filter.lower())
@@ -97,9 +73,33 @@ def render_tag_compliance_tab(session):
         render_filter_button("Whitelisted", metrics['whitelisted'], "filter_whitelist_tag_objects_btn", "Whitelisted Only", "tag_compliance_filter")
     
     st.html("<br>")
-    st.markdown("---")
+    
+    # Object type selection and search
+    col1, col2, col3 = st.columns([1, 3, 1])
+    with col1:
+        object_type_input = st.selectbox(
+            "Select Object Type",
+            ["WAREHOUSE", "DATABASE", "TABLE"],
+            index=["WAREHOUSE", "DATABASE", "TABLE"].index(st.session_state.tag_object_type_filter),
+            key="tag_object_type_input"
+        )
+    with col2:
+        search_input = st.text_input("Search by object name", placeholder="Type object name...", key="tag_search_input", label_visibility="collapsed")
+    with col3:
+        if st.button("Search", key="tag_search_btn", type="primary", use_container_width=True):
+            st.session_state.tag_search_term = search_input
+            st.session_state.tag_object_type_filter = object_type_input
+            st.session_state.tag_current_page = 0  # Reset to first page on new search
+    
+    # Get tag rules for selected object type
+    object_tag_rules = tag_rules_df[tag_rules_df['OBJECT_TYPE'] == st.session_state.tag_object_type_filter]
+    
+    if object_tag_rules.empty:
+        st.info(f"No tag rules have been applied for {st.session_state.tag_object_type_filter}s yet.")
+        return
     
     # Pagination controls
+    st.markdown("---")
     offset = st.session_state.tag_current_page * st.session_state.tag_page_size
     
     try:

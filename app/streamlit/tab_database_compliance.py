@@ -93,9 +93,8 @@ def render_database_compliance_tab(session):
             st.session_state.db_object_type_filter = object_type_input
             st.session_state.db_current_page = 0  # Reset to first page on new search
     
-    st.markdown("---")
-    
     # Pagination controls
+    st.markdown("---")
     offset = st.session_state.db_current_page * st.session_state.db_page_size
     object_type_for_query = None if st.session_state.db_object_type_filter == "All" else st.session_state.db_object_type_filter
     

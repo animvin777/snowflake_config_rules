@@ -1339,28 +1339,62 @@ def save_rule_kpi_results(session, applied_rules_df, whitelist_df):
     if applied_rules_df.empty:
         return
     
-    # Calculate metrics for each applied rule
+    # Calculate metrics for each applied rule by counting specific violations
     for _, rule in applied_rules_df.iterrows():
         applied_rule_id = rule['APPLIED_RULE_ID']
         rule_id = rule['RULE_ID']
         rule_type = rule['RULE_TYPE']
         
+        # Query to count violations for this specific rule
         if rule_type == 'Warehouse':
-            # Get warehouse compliance data
+            # Count warehouses and violations for this specific applied_rule_id
             query = f"""
+            WITH parsed_violations AS (
+                SELECT 
+                    warehouse_name,
+                    value::VARIANT as violation
+                FROM data_schema.warehouse_compliance_results,
+                LATERAL FLATTEN(input => violations)
+            )
             SELECT 
-                COUNT(*) as total_evaluated,
-                SUM(CASE WHEN ARRAY_SIZE(violations) > 0 THEN 1 ELSE 0 END) as total_violations,
-                SUM(CASE WHEN ARRAY_SIZE(violations) = 0 THEN 1 ELSE 0 END) as total_compliant
-            FROM data_schema.warehouse_compliance_results
+                (SELECT COUNT(DISTINCT warehouse_name) FROM data_schema.warehouse_compliance_results) as total_evaluated,
+                COUNT(DISTINCT CASE 
+                    WHEN violation:applied_rule_id::NUMBER = {applied_rule_id} 
+                         AND violation:is_whitelisted::BOOLEAN = FALSE 
+                    THEN warehouse_name 
+                END) as total_violations,
+                (SELECT COUNT(DISTINCT warehouse_name) FROM data_schema.warehouse_compliance_results) - 
+                COUNT(DISTINCT CASE 
+                    WHEN violation:applied_rule_id::NUMBER = {applied_rule_id} 
+                         AND violation:is_whitelisted::BOOLEAN = FALSE 
+                    THEN warehouse_name 
+                END) as total_compliant
+            FROM parsed_violations
             """
         else:  # Database
             query = f"""
+            WITH parsed_violations AS (
+                SELECT 
+                    object_type,
+                    COALESCE(database_name, '') || '|' || COALESCE(schema_name, '') || '|' || COALESCE(table_name, '') as object_key,
+                    value::VARIANT as violation
+                FROM data_schema.database_compliance_results,
+                LATERAL FLATTEN(input => violations)
+            )
             SELECT 
-                COUNT(*) as total_evaluated,
-                SUM(CASE WHEN ARRAY_SIZE(violations) > 0 THEN 1 ELSE 0 END) as total_violations,
-                SUM(CASE WHEN ARRAY_SIZE(violations) = 0 THEN 1 ELSE 0 END) as total_compliant
-            FROM data_schema.database_compliance_results
+                (SELECT COUNT(*) FROM data_schema.database_compliance_results) as total_evaluated,
+                COUNT(DISTINCT CASE 
+                    WHEN violation:applied_rule_id::NUMBER = {applied_rule_id} 
+                         AND violation:is_whitelisted::BOOLEAN = FALSE 
+                    THEN object_key 
+                END) as total_violations,
+                (SELECT COUNT(*) FROM data_schema.database_compliance_results) - 
+                COUNT(DISTINCT CASE 
+                    WHEN violation:applied_rule_id::NUMBER = {applied_rule_id} 
+                         AND violation:is_whitelisted::BOOLEAN = FALSE 
+                    THEN object_key 
+                END) as total_compliant
+            FROM parsed_violations
             """
         
         result = session.sql(query).to_pandas().iloc[0]
@@ -1409,14 +1443,30 @@ def save_tag_rule_kpi_results(session, applied_tag_rules_df, whitelist_df):
         tag_name = rule['TAG_NAME']
         object_type = rule['OBJECT_TYPE']
         
-        # Get tag compliance data
+        # Query to count violations for this specific tag rule
         query = f"""
+        WITH parsed_violations AS (
+            SELECT 
+                object_name,
+                value::VARIANT as violation
+            FROM data_schema.tag_compliance_results,
+            LATERAL FLATTEN(input => violations)
+            WHERE object_type = '{object_type}'
+        )
         SELECT 
-            COUNT(*) as total_evaluated,
-            SUM(CASE WHEN ARRAY_SIZE(violations) > 0 THEN 1 ELSE 0 END) as total_violations,
-            SUM(CASE WHEN ARRAY_SIZE(violations) = 0 THEN 1 ELSE 0 END) as total_compliant
-        FROM data_schema.tag_compliance_results
-        WHERE object_type = '{object_type}'
+            (SELECT COUNT(*) FROM data_schema.tag_compliance_results WHERE object_type = '{object_type}') as total_evaluated,
+            COUNT(DISTINCT CASE 
+                WHEN violation:applied_tag_rule_id::NUMBER = {applied_tag_rule_id} 
+                     AND violation:is_whitelisted::BOOLEAN = FALSE 
+                THEN object_name 
+            END) as total_violations,
+            (SELECT COUNT(*) FROM data_schema.tag_compliance_results WHERE object_type = '{object_type}') - 
+            COUNT(DISTINCT CASE 
+                WHEN violation:applied_tag_rule_id::NUMBER = {applied_tag_rule_id} 
+                     AND violation:is_whitelisted::BOOLEAN = FALSE 
+                THEN object_name 
+            END) as total_compliant
+        FROM parsed_violations
         """
         
         result = session.sql(query).to_pandas().iloc[0]
